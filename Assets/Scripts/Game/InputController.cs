@@ -247,16 +247,13 @@ namespace ColorMatchRush
             // Use direct method call instead of SendMessage for better performance
             if (board != null)
             {
-                bool swapSuccessful = board.TrySwap(sourcePiece, targetPiece);
-                
-                // Only lock input if swap was initiated (BoardManager will unlock when done)
-                if (swapSuccessful)
+                bool swapStarted = board.TrySwap(sourcePiece, targetPiece);
+                if (!swapStarted)
                 {
-                    LockInputAndReset();
+                currentInputState.Reset();
                 }
                 else
                 {
-                    // Swap failed, reset state without locking
                     currentInputState.Reset();
                 }
             }

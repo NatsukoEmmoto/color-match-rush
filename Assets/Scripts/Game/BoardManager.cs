@@ -158,131 +158,121 @@ namespace ColorMatchRush
         }
 
         #region Swap Operations
-        /// <summary>
-        /// Reference to InputController to avoid FindObjectOfType calls
-        /// </summary>
+        [SerializeField, Tooltip("Seconds to move per swap/bounce.")]
+        private float swapMoveDuration = 0.12f;
+
         private InputController inputController;
+        public void SetInputController(InputController controller) => inputController = controller;
 
-        /// <summary>
-        /// Set the InputController reference to avoid expensive lookups
-        /// </summary>
-        public void SetInputController(InputController controller)
-        {
-            inputController = controller;
-        }
-
-        /// <summary>
-        /// Check if two pieces are adjacent (4-neighborhood)
-        /// </summary>
         public bool AreAdjacent(Piece a, Piece b)
         {
             if (a == null || b == null) return false;
-            
-            int rowDiff = Mathf.Abs(a.Row - b.Row);
-            int colDiff = Mathf.Abs(a.Column - b.Column);
-            
-            return (rowDiff == 1 && colDiff == 0) || (rowDiff == 0 && colDiff == 1);
+            int dr = Mathf.Abs(a.Row - b.Row);
+            int dc = Mathf.Abs(a.Column - b.Column);
+            return (dr == 1 && dc == 0) || (dr == 0 && dc == 1);
         }
 
-        /// <summary>
-        /// Legacy SendMessage compatibility method for InputController
-        /// </summary>
+        // (Optional) legacy SendMessage path
         public void TrySwap(object payload)
         {
             if (payload is object[] arr && arr.Length >= 2)
-            {
                 TrySwap(arr[0] as Piece, arr[1] as Piece);
-            }
         }
 
-        /// <summary>
-        /// Attempt to swap two pieces if they are adjacent
-        /// </summary>
-        public bool TrySwap(Piece pieceA, Piece pieceB)
+        public bool TrySwap(Piece a, Piece b)
         {
-            if (!IsValidSwapRequest(pieceA, pieceB))
-            {
-                UnlockInput();
-                return false;
-            }
+            if (a == null || b == null || a == b) return false;
+            if (!AreAdjacent(a, b)) return false;
 
-            if (!AreAdjacent(pieceA, pieceB))
-            {
-                UnlockInput();
-                return false;
-            }
+            if (inputController == null) inputController = FindObjectOfType<InputController>();
+            if (inputController) inputController.SetInputLock(true);
 
-            ExecuteSwap(pieceA, pieceB);
-            
-            // TODO: Add match checking logic here
-            // if (!HasMatches()) { RevertSwap(pieceA, pieceB); return false; }
-            
-            UnlockInput();
+            StartCoroutine(SwapRoutine(a, b));
             return true;
         }
 
-        /// <summary>
-        /// Validate swap request parameters
-        /// </summary>
-        private bool IsValidSwapRequest(Piece pieceA, Piece pieceB)
+        private System.Collections.IEnumerator SwapRoutine(Piece a, Piece b)
         {
-            return pieceA != null && pieceB != null && pieceA != pieceB;
-        }
+            // Cache original indices
+            int ar = a.Row, ac = a.Column;
+            int br = b.Row, bc = b.Column;
 
-        /// <summary>
-        /// Execute the actual swap operation
-        /// </summary>
-        private void ExecuteSwap(Piece pieceA, Piece pieceB)
-        {
-            // Cache positions
-            var positionA = new Vector2Int(pieceA.Row, pieceA.Column);
-            var positionB = new Vector2Int(pieceB.Row, pieceB.Column);
+            // Swap in grid + indices
+            grid[ar, ac] = b; grid[br, bc] = a;
+            a.SetGridIndex(br, bc); b.SetGridIndex(ar, ac);
 
-            // Update grid references
-            grid[positionA.x, positionA.y] = pieceB;
-            grid[positionB.x, positionB.y] = pieceA;
+            // Animate to new positions
+            a.MoveTo(CellToWorld(a.Row, a.Column), swapMoveDuration);
+            b.MoveTo(CellToWorld(b.Row, b.Column), swapMoveDuration);
+            yield return WaitUntilPiecesStop(a, b);
 
-            // Update piece grid indices
-            pieceA.SetGridIndex(positionB.x, positionB.y);
-            pieceB.SetGridIndex(positionA.x, positionA.y);
+            // Check local matches around both pieces
+            bool matched = CreatesMatchAt(a.Row, a.Column) || CreatesMatchAt(b.Row, b.Column);
 
-            // Animate pieces to new positions
-            AnimatePieceToPosition(pieceA);
-            AnimatePieceToPosition(pieceB);
-        }
-
-        /// <summary>
-        /// Animate piece to its current grid position
-        /// </summary>
-        private void AnimatePieceToPosition(Piece piece)
-        {
-            if (piece != null)
+            if (!matched)
             {
-                Vector3 targetWorldPosition = CellToWorld(piece.Row, piece.Column);
-                piece.MoveTo(targetWorldPosition);
+                // Revert to original indices (ar,ac) / (br,bc)
+                grid[ar, ac] = a;
+                grid[br, bc] = b;
+
+                a.SetGridIndex(ar, ac);
+                b.SetGridIndex(br, bc);
+
+                a.MoveTo(CellToWorld(ar, ac), swapMoveDuration);
+                b.MoveTo(CellToWorld(br, bc), swapMoveDuration);
+                
+                yield return WaitUntilPiecesStop(a, b);
             }
+
+            UnlockInput();
         }
 
-        /// <summary>
-        /// Unlock input through the cached controller reference
-        /// </summary>
+        private System.Collections.IEnumerator WaitUntilPiecesStop(Piece a, Piece b)
+        {
+            // simple wait-until both finish their MoveTo
+            while ((a != null && a.IsMoving) || (b != null && b.IsMoving))
+                yield return null;
+        }
+
+        // Returns true if there is a 3+ line including cell (row,col)
+        private bool CreatesMatchAt(int row, int column)
+        {
+            Piece center = grid[row, column];
+            if (center == null) return false;
+            var type = center.Type;
+
+            int horiz = 1 + CountDir(row, column, 0, -1, type) + CountDir(row, column, 0, 1, type);
+            if (horiz >= 3) return true;
+
+            int vert = 1 + CountDir(row, column, -1, 0, type) + CountDir(row, column, 1, 0, type);
+            return vert >= 3;
+        }
+
+        private int CountDir(int row, int col, int dr, int dc, Piece.PieceType type)
+        {
+            int count = 0;
+            int r = row + dr, c = col + dc;
+            while (r >= 0 && r < height && c >= 0 && c < width)
+            {
+                var p = grid[r, c];
+                if (p == null || p.Type != type) break;
+                count++;
+                r += dr; c += dc;
+            }
+            return count;
+        }
+
         private void UnlockInput()
         {
-            if (inputController != null)
-            {
-                inputController.SetInputLock(false);
-            }
+            if (inputController != null) inputController.SetInputLock(false);
             else
             {
-                // Fallback to FindObjectOfType if reference is not set
-                var controller = FindObjectOfType<InputController>();
-                if (controller != null)
-                {
-                    controller.SetInputLock(false);
-                }
+                var ic = FindObjectOfType<InputController>();
+                if (ic) ic.SetInputLock(false);
             }
         }
         #endregion
+
 
 
 #if UNITY_EDITOR

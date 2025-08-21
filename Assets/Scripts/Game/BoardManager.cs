@@ -84,7 +84,7 @@ namespace ColorMatchRush
                     Piece piece = Instantiate(prefab, boardRoot);
 
                     Vector3 worldPos = CellToWorld(row, column);
-                    piece.Initialize(row, column, piece.Type, worldPos);
+                    piece.Initialize(row, column, prefab.Type, worldPos);
 
                     grid[row, column] = piece;
                 }

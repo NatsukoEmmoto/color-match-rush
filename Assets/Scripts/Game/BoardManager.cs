@@ -157,6 +157,134 @@ namespace ColorMatchRush
             return piecePrefabs[index];
         }
 
+        #region Swap Operations
+        /// <summary>
+        /// Reference to InputController to avoid FindObjectOfType calls
+        /// </summary>
+        private InputController inputController;
+
+        /// <summary>
+        /// Set the InputController reference to avoid expensive lookups
+        /// </summary>
+        public void SetInputController(InputController controller)
+        {
+            inputController = controller;
+        }
+
+        /// <summary>
+        /// Check if two pieces are adjacent (4-neighborhood)
+        /// </summary>
+        public bool AreAdjacent(Piece a, Piece b)
+        {
+            if (a == null || b == null) return false;
+            
+            int rowDiff = Mathf.Abs(a.Row - b.Row);
+            int colDiff = Mathf.Abs(a.Column - b.Column);
+            
+            return (rowDiff == 1 && colDiff == 0) || (rowDiff == 0 && colDiff == 1);
+        }
+
+        /// <summary>
+        /// Legacy SendMessage compatibility method for InputController
+        /// </summary>
+        public void TrySwap(object payload)
+        {
+            if (payload is object[] arr && arr.Length >= 2)
+            {
+                TrySwap(arr[0] as Piece, arr[1] as Piece);
+            }
+        }
+
+        /// <summary>
+        /// Attempt to swap two pieces if they are adjacent
+        /// </summary>
+        public bool TrySwap(Piece pieceA, Piece pieceB)
+        {
+            if (!IsValidSwapRequest(pieceA, pieceB))
+            {
+                UnlockInput();
+                return false;
+            }
+
+            if (!AreAdjacent(pieceA, pieceB))
+            {
+                UnlockInput();
+                return false;
+            }
+
+            ExecuteSwap(pieceA, pieceB);
+            
+            // TODO: Add match checking logic here
+            // if (!HasMatches()) { RevertSwap(pieceA, pieceB); return false; }
+            
+            UnlockInput();
+            return true;
+        }
+
+        /// <summary>
+        /// Validate swap request parameters
+        /// </summary>
+        private bool IsValidSwapRequest(Piece pieceA, Piece pieceB)
+        {
+            return pieceA != null && pieceB != null && pieceA != pieceB;
+        }
+
+        /// <summary>
+        /// Execute the actual swap operation
+        /// </summary>
+        private void ExecuteSwap(Piece pieceA, Piece pieceB)
+        {
+            // Cache positions
+            var positionA = new Vector2Int(pieceA.Row, pieceA.Column);
+            var positionB = new Vector2Int(pieceB.Row, pieceB.Column);
+
+            // Update grid references
+            grid[positionA.x, positionA.y] = pieceB;
+            grid[positionB.x, positionB.y] = pieceA;
+
+            // Update piece grid indices
+            pieceA.SetGridIndex(positionB.x, positionB.y);
+            pieceB.SetGridIndex(positionA.x, positionA.y);
+
+            // Animate pieces to new positions
+            AnimatePieceToPosition(pieceA);
+            AnimatePieceToPosition(pieceB);
+        }
+
+        /// <summary>
+        /// Animate piece to its current grid position
+        /// </summary>
+        private void AnimatePieceToPosition(Piece piece)
+        {
+            if (piece != null)
+            {
+                Vector3 targetWorldPosition = CellToWorld(piece.Row, piece.Column);
+                piece.MoveTo(targetWorldPosition);
+            }
+        }
+
+        /// <summary>
+        /// Unlock input through the cached controller reference
+        /// </summary>
+        private void UnlockInput()
+        {
+            if (inputController != null)
+            {
+                inputController.SetInputLock(false);
+            }
+            else
+            {
+                // Fallback to FindObjectOfType if reference is not set
+                var controller = FindObjectOfType<InputController>();
+                if (controller != null)
+                {
+                    controller.SetInputLock(false);
+                }
+            }
+        }
+        #endregion
+
+
 #if UNITY_EDITOR
         private void OnDrawGizmos()
         {

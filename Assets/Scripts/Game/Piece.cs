@@ -103,7 +103,7 @@ namespace ColorMatchRush
             float t = 0f;
             while (t < 1f)
             {
-                t += (duration <= 0f ? 1f : Time.deltaTime / duration);
+                t += Time.deltaTime / duration;
                 float eased = moveEase.Evaluate(Mathf.Clamp01(t));
                 cachedTf.position = Vector3.LerpUnclamped(start, targetPos, eased);
                 yield return null;

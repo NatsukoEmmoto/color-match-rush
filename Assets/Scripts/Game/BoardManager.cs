@@ -98,7 +98,7 @@ namespace ColorMatchRush
         {
             for (int i = boardRoot.childCount - 1; i >= 0; i--)
             {
-                DestroyImmediate(boardRoot.GetChild(i).gameObject);
+                Destroy(boardRoot.GetChild(i).gameObject);
             }
             grid = null;
         }

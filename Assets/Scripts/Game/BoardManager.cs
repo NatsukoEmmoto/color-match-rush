@@ -39,6 +39,7 @@ namespace ColorMatchRush
 
         public int Width => width;
         public int Height => height;
+        public float CellSize => cellSize;
         public Piece[,] Grid => grid;
 
         private void Awake()
@@ -81,6 +82,12 @@ namespace ColorMatchRush
                 for (int column = 0; column < width; column++)
                 {
                     Piece prefab = GetRandomPiecePrefab();
+                    if (prefab == null)
+                    {
+                        Debug.LogError($"[BoardManager] Failed to get valid prefab for position ({row}, {column}). Skipping cell.");
+                        continue; // Skip this cell, leave it null in the grid
+                    }
+                    
                     Piece piece = Instantiate(prefab, boardRoot);
 
                     Vector3 worldPos = CellToWorld(row, column);
@@ -150,12 +157,136 @@ namespace ColorMatchRush
         {
             if (piecePrefabs == null || piecePrefabs.Length == 0)
             {
-                Debug.LogError("[BoardManager] piecePrefabs not assigned.");
+                Debug.LogError("[BoardManager] piecePrefabs not assigned or empty.");
                 return null;
             }
+
             int index = Random.Range(0, piecePrefabs.Length);
-            return piecePrefabs[index];
+            Piece prefab = piecePrefabs[index];
+
+            if (prefab == null)
+            {
+                Debug.LogError($"[BoardManager] piecePrefabs[{index}] is null (check Inspector).");
+                return null;
+            }
+
+            return prefab;
         }
+
+        #region Swap Operations
+        [SerializeField, Tooltip("Seconds to move per swap/bounce.")]
+        private float swapMoveDuration = 0.12f;
+        [SerializeField] private bool swapInProgress = false;
+
+        private InputController inputController;
+        public void SetInputController(InputController controller) => inputController = controller;
+
+        public bool AreAdjacent(Piece a, Piece b)
+        {
+            if (a == null || b == null) return false;
+            int dr = Mathf.Abs(a.Row - b.Row);
+            int dc = Mathf.Abs(a.Column - b.Column);
+            return (dr == 1 && dc == 0) || (dr == 0 && dc == 1);
+        }
+
+        public bool TrySwap(Piece a, Piece b)
+        {
+            if (swapInProgress) return false;
+            if (a == null || b == null || a == b) return false;
+            if (!AreAdjacent(a, b)) return false;
+
+            swapInProgress = true;
+            if (inputController == null) inputController = FindObjectOfType<InputController>();
+            if (inputController) inputController.SetInputLock(true);
+
+            StartCoroutine(SwapRoutine(a, b));
+            return true;
+        }
+
+        private System.Collections.IEnumerator SwapRoutine(Piece a, Piece b)
+        {
+            // Cache original indices
+            int ar = a.Row, ac = a.Column;
+            int br = b.Row, bc = b.Column;
+
+            // Swap in grid + indices
+            grid[ar, ac] = b; grid[br, bc] = a;
+            a.SetGridIndex(br, bc); b.SetGridIndex(ar, ac);
+
+            // Animate to new positions
+            a.MoveTo(CellToWorld(a.Row, a.Column), swapMoveDuration);
+            b.MoveTo(CellToWorld(b.Row, b.Column), swapMoveDuration);
+            yield return WaitUntilPiecesStop(a, b);
+
+            // Check local matches around both pieces
+            bool matched = CreatesMatchAt(a.Row, a.Column) || CreatesMatchAt(b.Row, b.Column);
+
+            if (!matched)
+            {
+                // Revert to original indices (ar,ac) / (br,bc)
+                grid[ar, ac] = a;
+                grid[br, bc] = b;
+
+                a.SetGridIndex(ar, ac);
+                b.SetGridIndex(br, bc);
+
+                a.MoveTo(CellToWorld(ar, ac), swapMoveDuration);
+                b.MoveTo(CellToWorld(br, bc), swapMoveDuration);
+                
+                yield return WaitUntilPiecesStop(a, b);
+            }
+
+            UnlockInput();
+            swapInProgress = false;
+        }
+
+        private System.Collections.IEnumerator WaitUntilPiecesStop(Piece a, Piece b)
+        {
+            // simple wait-until both finish their MoveTo
+            while ((a != null && a.IsMoving) || (b != null && b.IsMoving))
+                yield return null;
+        }
+
+        // Returns true if there is a 3+ line including cell (row,col)
+        private bool CreatesMatchAt(int row, int column)
+        {
+            Piece center = grid[row, column];
+            if (center == null) return false;
+            var type = center.Type;
+
+            int horiz = 1 + CountDir(row, column, 0, -1, type) + CountDir(row, column, 0, 1, type);
+            if (horiz >= 3) return true;
+
+            int vert = 1 + CountDir(row, column, -1, 0, type) + CountDir(row, column, 1, 0, type);
+            return vert >= 3;
+        }
+
+        private int CountDir(int row, int col, int dr, int dc, Piece.PieceType type)
+        {
+            int count = 0;
+            int r = row + dr, c = col + dc;
+            while (r >= 0 && r < height && c >= 0 && c < width)
+            {
+                var p = grid[r, c];
+                if (p == null || p.Type != type) break;
+                count++;
+                r += dr; c += dc;
+            }
+            return count;
+        }
+
+        private void UnlockInput()
+        {
+            if (inputController != null) inputController.SetInputLock(false);
+            else
+            {
+                var ic = FindObjectOfType<InputController>();
+                if (ic) ic.SetInputLock(false);
+            }
+        }
+        #endregion
+
+
 
 #if UNITY_EDITOR
         private void OnDrawGizmos()

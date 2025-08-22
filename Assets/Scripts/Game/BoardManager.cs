@@ -241,6 +241,11 @@ namespace ColorMatchRush
                 if (removed > 0)
                 {
                     CollapseColumnsDownward();
+                    yield return WaitUntilAllPiecesStop();
+
+                    RefillNewPiecesFromTop();
+                    yield return WaitUntilAllPiecesStop();
+
                     //TODO: Loop Match and refill cycle
                 }
             }
@@ -466,6 +471,9 @@ namespace ColorMatchRush
         [Header("Resolve")]
         [SerializeField, Tooltip("Seconds to move per falling step.")]
         private float fallMoveDuration = 0.08f;
+        
+        [SerializeField, Tooltip("How many cells above the top to spawn new pieces before falling.")]
+        private float spawnOvershootCells = 1f;
 
         /// <summary>
         /// Collapse all columns downward using a write-pointer per column.
@@ -505,6 +513,74 @@ namespace ColorMatchRush
             }
 
             return anyMoved;
+        }
+        
+        /// <summary>
+        /// Refill empty cells by spawning new pieces above the top row and animating them down.
+        /// Returns true if any piece was spawned.
+        /// </summary>
+        public bool RefillNewPiecesFromTop()
+        {
+            if (grid == null) return false;
+
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+            bool anySpawned = false;
+
+            for (int c = 0; c < w; c++)
+            {
+                for (int r = h - 1; r >= 0; r--)
+                {
+                    if (grid[r, c] != null) continue;
+
+                    // pick a random prefab
+                    Piece prefab = GetRandomPiecePrefab();
+                    if (prefab == null) continue;
+
+                    // spawn slightly above the target cell and fall down
+                    Vector3 targetWorld = CellToWorld(r, c);
+                    Vector3 startWorld = targetWorld + new Vector3(0f, cellSize * spawnOvershootCells, 0f);
+
+                    Piece piece = Instantiate(prefab, boardRoot);
+                    piece.Initialize(r, c, prefab.Type, startWorld);
+
+                    grid[r, c] = piece;
+                    piece.MoveTo(targetWorld, fallMoveDuration);
+
+                    anySpawned = true;
+                }
+            }
+
+            return anySpawned;
+        }
+
+        /// <summary>
+        /// Wait until all pieces in the grid finish moving.
+        /// </summary>
+        private System.Collections.IEnumerator WaitUntilAllPiecesStop()
+        {
+            if (grid == null) yield break;
+
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+
+            while (true)
+            {
+                bool anyMoving = false;
+
+                for (int r = 0; r < h && !anyMoving; r++)
+                {
+                    for (int c = 0; c < w && !anyMoving; c++)
+                    {
+                        var p = grid[r, c];
+                        if (p != null && p.IsMoving)
+                            anyMoving = true;
+                    }
+                }
+
+                if (!anyMoving) yield break;
+                yield return null;
+            }
         }
 
         #endregion

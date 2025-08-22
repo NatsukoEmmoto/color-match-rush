@@ -334,7 +334,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   board: {fileID: 350540674}
   inputCamera: {fileID: 519420031}
-  dragThresholdWorld: 0.6
+  dragThresholdCellRatio: 0.6
   inputLocked: 0
 --- !u!4 &1545997792
 Transform:

@@ -406,10 +406,16 @@ namespace ColorMatchRush
 
                 // Try by declared indices first
                 int r = piece.Row, c = piece.Column;
-                if (grid != null && IsInBounds(r, c) && (grid[r, c] == null || grid[r, c] == piece))
+                if (grid != null && IsInBounds(r, c))
                 {
-                    grid[r, c] = null;
-                    cleared = true;
+                    if (grid[r, c] == null)
+                    {
+                        Debug.LogWarning($"[BoardManager] Attempting to clear an already-null cell at ({r},{c}).");
+                    }
+                    else if (grid[r, c] == piece)
+                    {
+                        grid[r, c] = null;
+                    }
                 }
 
                 // Fallback: locate exact instance in the grid

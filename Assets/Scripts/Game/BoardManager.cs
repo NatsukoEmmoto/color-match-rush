@@ -411,10 +411,12 @@ namespace ColorMatchRush
                     if (grid[r, c] == null)
                     {
                         Debug.LogWarning($"[BoardManager] Attempting to clear an already-null cell at ({r},{c}).");
+                        cleared = true; // cell is already clear; safe to destroy
                     }
                     else if (grid[r, c] == piece)
                     {
                         grid[r, c] = null;
+                        cleared = true; // successfully cleared by declared indices
                     }
                 }
 
@@ -432,14 +434,23 @@ namespace ColorMatchRush
                             }
                         }
                     }
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
                     if (!cleared)
                         Debug.LogWarning($"[BoardManager] Matched piece not found in grid (id={piece.GetInstanceID()}).");
-        #endif
+#endif
                 }
 
-                Destroy(piece.gameObject);
-                removed++;
+                if (cleared || grid == null)
+                {
+                    Destroy(piece.gameObject);
+                    removed++;
+                }
+#if UNITY_EDITOR
+                else
+                {
+                    Debug.LogWarning($"[BoardManager] Skip destroying piece (id={piece.GetInstanceID()}) because grid reference wasn't cleared.");
+                }
+#endif
             }
 
             return removed;

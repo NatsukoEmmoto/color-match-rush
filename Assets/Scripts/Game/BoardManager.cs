@@ -30,6 +30,8 @@ namespace ColorMatchRush
         private bool generateOnStart = true;
         [SerializeField, Tooltip("Optional random seed for repeatable boards. 0 = random.")]
         private int randomSeed = 0;
+        [SerializeField, Tooltip("Avoid 3-in-a-row/column at startup.")]
+        private bool preventInstantMatchesOnStart = true;
 
         // Grid storage (row-major: [row, column])
         private Piece[,] grid;
@@ -68,10 +70,103 @@ namespace ColorMatchRush
         public void GenerateBoard()
         {
             if (randomSeed != 0)
-            {
                 Random.InitState(randomSeed);
+
+            // First pass: build with or without instant-match avoidance
+            GenerateBoardInternal(preventInstantMatchesOnStart);
+
+            // Safety pass: if anything slipped through, try a few regenerations
+            if (preventInstantMatchesOnStart)
+                EnsureNoInstantMatches();
+        }
+        /// <summary>
+        /// Returns true if placing a piece of the given type at (row,col)
+        /// would immediately create a 3+ match with already-placed neighbors.
+        /// Assumes generation order is from bottom to top, left to right.
+        /// Checks only left and down directions (already filled cells).
+        /// </summary>
+        private bool WouldCreateInstantMatchAt(int row, int col, Piece.PieceType type)
+        {
+            // Horizontal check: left two
+            if (col >= 2)
+            {
+                var p1 = grid[row, col - 1];
+                var p2 = grid[row, col - 2];
+                if (p1 != null && p2 != null && p1.Type == type && p2.Type == type)
+                    return true;
             }
 
+            // Vertical check: down two
+            if (row >= 2)
+            {
+                var p1 = grid[row - 1, col];
+                var p2 = grid[row - 2, col];
+                if (p1 != null && p2 != null && p1.Type == type && p2.Type == type)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Pick a random prefab that does NOT cause an instant 3-match at (row,col).
+        /// Tries a limited number of attempts and falls back to any random prefab if needed.
+        /// </summary>
+        private Piece GetRandomPrefabAvoidingInstantMatch(int row, int col)
+        {
+            if (piecePrefabs == null || piecePrefabs.Length == 0)
+            {
+                Debug.LogError("[BoardManager] piecePrefabs not assigned or empty.");
+                return null;
+            }
+
+            const int maxAttempts = 12;
+            Piece lastTried = null;
+
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                int idx = Random.Range(0, piecePrefabs.Length);
+                var prefab = piecePrefabs[idx];
+                if (prefab == null) continue;
+                lastTried = prefab;
+                if (!WouldCreateInstantMatchAt(row, col, prefab.Type))
+                    return prefab;
+            }
+
+            // Fallback: return the last tried valid prefab even if it matches (very unlikely with 5 colors)
+            if (lastTried == null)
+                Debug.LogError("[BoardManager] Failed to choose a valid prefab (all null?).");
+            else
+                Debug.LogWarning($"[BoardManager] Fallback to potentially matching prefab at ({row},{col}).");
+
+            return lastTried;
+        }
+
+        /// <summary>
+        /// Ensure the current grid has no instant matches; if found, regenerates up to a few attempts.
+        /// This is only used at startup for safety; normal play uses resolve loop.
+        /// </summary>
+        private void EnsureNoInstantMatches()
+        {
+            if (!preventInstantMatchesOnStart || grid == null) return;
+
+            const int maxRegen = 5;
+            for (int i = 0; i < maxRegen; i++)
+            {
+                var matches = FindAllMatches();
+                if (matches == null || matches.Count == 0) return; // already clean
+
+                // Re-generate with the avoidance picker to try a clean board
+                Debug.LogWarning($"[BoardManager] Instant matches detected at start. Regenerating (attempt {i + 1}/{maxRegen})...");
+                GenerateBoardInternal(avoidInstantMatches: true);
+            }
+        }
+
+        /// <summary>
+        /// Internal generator with a switch to avoid instant matches during placement.
+        /// </summary>
+        private void GenerateBoardInternal(bool avoidInstantMatches)
+        {
             ComputeOrigin();
             ClearBoardImmediate();
 
@@ -81,18 +176,19 @@ namespace ColorMatchRush
             {
                 for (int column = 0; column < width; column++)
                 {
-                    Piece prefab = GetRandomPiecePrefab();
+                    Piece prefab = avoidInstantMatches
+                        ? GetRandomPrefabAvoidingInstantMatch(row, column)
+                        : GetRandomPiecePrefab();
+
                     if (prefab == null)
                     {
                         Debug.LogError($"[BoardManager] Failed to get valid prefab for position ({row}, {column}). Skipping cell.");
-                        continue; // Skip this cell, leave it null in the grid
+                        continue; // leave null
                     }
-                    
-                    Piece piece = Instantiate(prefab, boardRoot);
 
+                    Piece piece = Instantiate(prefab, boardRoot);
                     Vector3 worldPos = CellToWorld(row, column);
                     piece.Initialize(row, column, prefab.Type, worldPos);
-
                     grid[row, column] = piece;
                 }
             }

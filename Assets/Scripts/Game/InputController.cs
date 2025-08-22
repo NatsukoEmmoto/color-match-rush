@@ -23,11 +23,11 @@ namespace ColorMatchRush
         [SerializeField] private Camera inputCamera;
 
         [Header("Settings")]
-        [Tooltip("Drag distance in world units to decide a swap (dominant axis).")]
-        [SerializeField] private float dragThresholdWorld = 0.6f;
+        [Tooltip("Drag distance as a ratio of cell size to decide a swap (dominant axis). Default 0.3 means 30% of a cell.")]
+        [SerializeField] private float dragThresholdCellRatio = 0.3f;
 
         [Header("Debug")]
-        [SerializeField] private bool inputLocked = false;
+        [SerializeField] private bool inputLocked = false; // for inspector view only (optional)
         #endregion
 
         #region Private Fields
@@ -53,11 +53,24 @@ namespace ColorMatchRush
         #endregion
 
         #region Properties
-        private Camera Cam => inputCamera != null ? inputCamera : Camera.main;
-        private float DragThresholdSquared => dragThresholdWorld * dragThresholdWorld;
+        private Camera Cam => inputCamera;
+        private float DragThresholdSquared
+        {
+            get
+            {
+                if (board == null) return 0f;
+                float worldThreshold = dragThresholdCellRatio * board.CellSize;
+                return worldThreshold * worldThreshold;
+            }
+        }
         #endregion
 
         #region Unity Lifecycle
+        private void Awake()
+        {
+            if (inputCamera == null) inputCamera = Camera.main;
+        }
+
         private void Reset()
         {
             InitializeReferences();
@@ -79,7 +92,11 @@ namespace ColorMatchRush
         /// <summary>
         /// Public API to lock/unlock input from external systems (e.g., while swapping/clearing).
         /// </summary>
-        public void SetInputLock(bool locked) => inputLocked = locked;
+        public void SetInputLock(bool locked)
+        {
+            inputLocked = locked;
+            enabled = !locked; // disable Update while locked
+        }
         #endregion
 
         #region Private Methods
@@ -244,30 +261,8 @@ namespace ColorMatchRush
 
         private void ExecuteSwap(Piece sourcePiece, Piece targetPiece)
         {
-            // Use direct method call instead of SendMessage for better performance
-            if (board != null)
-            {
-                bool swapStarted = board.TrySwap(sourcePiece, targetPiece);
-                if (!swapStarted)
-                {
-                currentInputState.Reset();
-                }
-                else
-                {
-                    currentInputState.Reset();
-                }
-            }
-            else
-            {
-                // Fallback to SendMessage if board reference is somehow null
-                board?.SendMessage("TrySwap", new object[] { sourcePiece, targetPiece }, SendMessageOptions.DontRequireReceiver);
-                LockInputAndReset();
-            }
-        }
-
-        private void LockInputAndReset()
-        {
-            inputLocked = true;
+            bool swapStarted = board.TrySwap(sourcePiece, targetPiece);
+            // BoardManager がロック/解除を管理するので、ここは状態だけリセット
             currentInputState.Reset();
         }
 

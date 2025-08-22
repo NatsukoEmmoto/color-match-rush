@@ -39,6 +39,7 @@ namespace ColorMatchRush
 
         public int Width => width;
         public int Height => height;
+        public float CellSize => cellSize;
         public Piece[,] Grid => grid;
 
         private void Awake()
@@ -81,6 +82,12 @@ namespace ColorMatchRush
                 for (int column = 0; column < width; column++)
                 {
                     Piece prefab = GetRandomPiecePrefab();
+                    if (prefab == null)
+                    {
+                        Debug.LogError($"[BoardManager] Failed to get valid prefab for position ({row}, {column}). Skipping cell.");
+                        continue; // Skip this cell, leave it null in the grid
+                    }
+                    
                     Piece piece = Instantiate(prefab, boardRoot);
 
                     Vector3 worldPos = CellToWorld(row, column);
@@ -150,16 +157,26 @@ namespace ColorMatchRush
         {
             if (piecePrefabs == null || piecePrefabs.Length == 0)
             {
-                Debug.LogError("[BoardManager] piecePrefabs not assigned.");
+                Debug.LogError("[BoardManager] piecePrefabs not assigned or empty.");
                 return null;
             }
+
             int index = Random.Range(0, piecePrefabs.Length);
-            return piecePrefabs[index];
+            Piece prefab = piecePrefabs[index];
+
+            if (prefab == null)
+            {
+                Debug.LogError($"[BoardManager] piecePrefabs[{index}] is null (check Inspector).");
+                return null;
+            }
+
+            return prefab;
         }
 
         #region Swap Operations
         [SerializeField, Tooltip("Seconds to move per swap/bounce.")]
         private float swapMoveDuration = 0.12f;
+        [SerializeField] private bool swapInProgress = false;
 
         private InputController inputController;
         public void SetInputController(InputController controller) => inputController = controller;
@@ -172,18 +189,13 @@ namespace ColorMatchRush
             return (dr == 1 && dc == 0) || (dr == 0 && dc == 1);
         }
 
-        // (Optional) legacy SendMessage path
-        public void TrySwap(object payload)
-        {
-            if (payload is object[] arr && arr.Length >= 2)
-                TrySwap(arr[0] as Piece, arr[1] as Piece);
-        }
-
         public bool TrySwap(Piece a, Piece b)
         {
+            if (swapInProgress) return false;
             if (a == null || b == null || a == b) return false;
             if (!AreAdjacent(a, b)) return false;
 
+            swapInProgress = true;
             if (inputController == null) inputController = FindObjectOfType<InputController>();
             if (inputController) inputController.SetInputLock(true);
 
@@ -225,6 +237,7 @@ namespace ColorMatchRush
             }
 
             UnlockInput();
+            swapInProgress = false;
         }
 
         private System.Collections.IEnumerator WaitUntilPiecesStop(Piece a, Piece b)

@@ -262,7 +262,7 @@ namespace ColorMatchRush
         private void ExecuteSwap(Piece sourcePiece, Piece targetPiece)
         {
             bool swapStarted = board.TrySwap(sourcePiece, targetPiece);
-            // BoardManager がロック/解除を管理するので、ここは状態だけリセット
+            // BoardManager handles locking/unlocking, so only reset the state here
             currentInputState.Reset();
         }
 

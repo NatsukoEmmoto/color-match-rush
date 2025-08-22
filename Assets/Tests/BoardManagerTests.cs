@@ -153,6 +153,97 @@ public class BoardManagerTests
     }
 
     [Test]
+    public void FindAllMatches_StaticMethod_PureFunctionality()
+    {
+        // Test the static method without needing a BoardManager instance
+        var testGrid = new Piece[3, 3];
+        
+        // Create a simple horizontal match
+        testGrid[1, 0] = CreateTestPiece(1, 0, Piece.PieceType.Red);
+        testGrid[1, 1] = CreateTestPiece(1, 1, Piece.PieceType.Red);
+        testGrid[1, 2] = CreateTestPiece(1, 2, Piece.PieceType.Red);
+        
+        var matches = BoardManager.FindAllMatches(testGrid, 3, 3);
+        
+        Assert.AreEqual(3, matches.Count);
+        Assert.IsTrue(matches.Contains(new Vector2Int(0, 1)));
+        Assert.IsTrue(matches.Contains(new Vector2Int(1, 1)));
+        Assert.IsTrue(matches.Contains(new Vector2Int(2, 1)));
+    }
+
+    [Test]
+    public void FindAllMatches_StaticMethod_NullGrid_ReturnsEmpty()
+    {
+        var matches = BoardManager.FindAllMatches(null, 3, 3);
+        
+        Assert.IsNotNull(matches);
+        Assert.AreEqual(0, matches.Count);
+    }
+
+    [Test]
+    public void FindAllMatches_ConsistentWithCreatesMatchAt()
+    {
+        var grid = GetGrid(boardManager);
+        
+        // Create a test scenario with known matches
+        // Horizontal match at row 1: (1,1), (1,2), (1,3)
+        grid[1, 1] = CreateTestPiece(1, 1, Piece.PieceType.Blue);
+        grid[1, 2] = CreateTestPiece(1, 2, Piece.PieceType.Blue);
+        grid[1, 3] = CreateTestPiece(1, 3, Piece.PieceType.Blue);
+        
+        // Get matches from our new method
+        var allMatches = boardManager.FindAllMatches();
+        
+        // Test that CreatesMatchAt returns true for each matched position
+        // We need to use reflection to access the private method for testing
+        var createsMatchAtMethod = typeof(BoardManager).GetMethod("CreatesMatchAt", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        
+        foreach (var match in allMatches)
+        {
+            bool createsMatch = (bool)createsMatchAtMethod.Invoke(boardManager, new object[] { match.y, match.x });
+            Assert.IsTrue(createsMatch, $"CreatesMatchAt should return true for position ({match.x}, {match.y})");
+        }
+        
+        // Also verify specific positions
+        Assert.AreEqual(3, allMatches.Count);
+        Assert.IsTrue(allMatches.Contains(new Vector2Int(1, 1)));
+        Assert.IsTrue(allMatches.Contains(new Vector2Int(2, 1)));
+        Assert.IsTrue(allMatches.Contains(new Vector2Int(3, 1)));
+    }
+
+    [Test]
+    public void FindAllMatches_CrossPattern_FindsBothMatches()
+    {
+        var grid = GetGrid(boardManager);
+        
+        // Create a cross pattern with a shared center piece
+        // Horizontal: (1,0), (1,1), (1,2)
+        // Vertical: (0,1), (1,1), (2,1)
+        // Center piece (1,1) should be counted once due to HashSet
+        
+        grid[1, 0] = CreateTestPiece(1, 0, Piece.PieceType.Red);
+        grid[1, 1] = CreateTestPiece(1, 1, Piece.PieceType.Red); // Center piece
+        grid[1, 2] = CreateTestPiece(1, 2, Piece.PieceType.Red);
+        
+        grid[0, 1] = CreateTestPiece(0, 1, Piece.PieceType.Red);
+        grid[2, 1] = CreateTestPiece(2, 1, Piece.PieceType.Red);
+        
+        var matches = boardManager.FindAllMatches();
+        
+        // Should find 5 unique positions (center counted once)
+        Assert.AreEqual(5, matches.Count);
+        
+        // Check all positions are found
+        Assert.IsTrue(matches.Contains(new Vector2Int(0, 1))); // Horizontal match
+        Assert.IsTrue(matches.Contains(new Vector2Int(1, 1))); // Center (shared)
+        Assert.IsTrue(matches.Contains(new Vector2Int(2, 1))); // Horizontal match
+        
+        Assert.IsTrue(matches.Contains(new Vector2Int(1, 0))); // Vertical match
+        Assert.IsTrue(matches.Contains(new Vector2Int(1, 2))); // Vertical match
+    }
+
+    [Test]
     public void FindAllMatches_LongerSequence_ReturnsAllPositions()
     {
         var grid = GetGrid(boardManager);

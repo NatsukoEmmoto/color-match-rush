@@ -292,20 +292,33 @@ namespace ColorMatchRush
         /// <returns>HashSet of grid positions (Vector2Int) that are part of matches. x=column, y=row.</returns>
         public HashSet<Vector2Int> FindAllMatches()
         {
-            if (grid == null) return new HashSet<Vector2Int>();
+            return FindAllMatches(grid, width, height);
+        }
+
+        /// <summary>
+        /// Scans a given grid for sequences of 3 or more same-type pieces.
+        /// This overload is unit-test friendly as it doesn't depend on instance state.
+        /// </summary>
+        /// <param name="gridToScan">The grid to scan for matches</param>
+        /// <param name="gridWidth">Width of the grid</param>
+        /// <param name="gridHeight">Height of the grid</param>
+        /// <returns>HashSet of grid positions (Vector2Int) that are part of matches. x=column, y=row.</returns>
+        public static HashSet<Vector2Int> FindAllMatches(Piece[,] gridToScan, int gridWidth, int gridHeight)
+        {
+            if (gridToScan == null) return new HashSet<Vector2Int>();
             
             var matchedPositions = new HashSet<Vector2Int>();
             
             // Scan horizontally (rows)
-            for (int row = 0; row < height; row++)
+            for (int row = 0; row < gridHeight; row++)
             {
-                ScanLineForMatches(row, 0, 0, 1, matchedPositions); // row, startCol, deltaRow, deltaCol
+                ScanLineForMatches(gridToScan, gridWidth, gridHeight, row, 0, 0, 1, matchedPositions); // row, startCol, deltaRow, deltaCol
             }
             
             // Scan vertically (columns)
-            for (int col = 0; col < width; col++)
+            for (int col = 0; col < gridWidth; col++)
             {
-                ScanLineForMatches(0, col, 1, 0, matchedPositions); // startRow, col, deltaRow, deltaCol
+                ScanLineForMatches(gridToScan, gridWidth, gridHeight, 0, col, 1, 0, matchedPositions); // startRow, col, deltaRow, deltaCol
             }
             
             return matchedPositions;
@@ -314,19 +327,22 @@ namespace ColorMatchRush
         /// <summary>
         /// Scans a single line (row or column) for sequences of 3+ same-type pieces.
         /// </summary>
+        /// <param name="gridToScan">The grid to scan</param>
+        /// <param name="gridWidth">Width of the grid</param>
+        /// <param name="gridHeight">Height of the grid</param>
         /// <param name="startRow">Starting row position</param>
         /// <param name="startCol">Starting column position</param>
         /// <param name="deltaRow">Row increment per step (1 for vertical scan, 0 for horizontal)</param>
         /// <param name="deltaCol">Column increment per step (1 for horizontal scan, 0 for vertical)</param>
         /// <param name="matchedPositions">HashSet to add matched positions to</param>
-        private void ScanLineForMatches(int startRow, int startCol, int deltaRow, int deltaCol, HashSet<Vector2Int> matchedPositions)
+        private static void ScanLineForMatches(Piece[,] gridToScan, int gridWidth, int gridHeight, int startRow, int startCol, int deltaRow, int deltaCol, HashSet<Vector2Int> matchedPositions)
         {
             int currentRow = startRow;
             int currentCol = startCol;
             
-            while (currentRow < height && currentCol < width)
+            while (currentRow < gridHeight && currentCol < gridWidth)
             {
-                var currentPiece = grid[currentRow, currentCol];
+                var currentPiece = gridToScan[currentRow, currentCol];
                 
                 // Skip null pieces
                 if (currentPiece == null)
@@ -344,9 +360,9 @@ namespace ColorMatchRush
                 int nextRow = currentRow + deltaRow;
                 int nextCol = currentCol + deltaCol;
                 
-                while (nextRow < height && nextCol < width)
+                while (nextRow < gridHeight && nextCol < gridWidth)
                 {
-                    var nextPiece = grid[nextRow, nextCol];
+                    var nextPiece = gridToScan[nextRow, nextCol];
                     
                     // Break if null or different type
                     if (nextPiece == null || nextPiece.Type != currentType)
@@ -370,6 +386,14 @@ namespace ColorMatchRush
                 currentRow = nextRow;
                 currentCol = nextCol;
             }
+        }
+
+        /// <summary>
+        /// Legacy version that uses instance grid - calls the static version
+        /// </summary>
+        private void ScanLineForMatches(int startRow, int startCol, int deltaRow, int deltaCol, HashSet<Vector2Int> matchedPositions)
+        {
+            ScanLineForMatches(grid, width, height, startRow, startCol, deltaRow, deltaCol, matchedPositions);
         }
         #endregion
 

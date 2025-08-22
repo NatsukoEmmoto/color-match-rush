@@ -237,8 +237,12 @@ namespace ColorMatchRush
             }
             else
             {
-                //TODO: Handle match and refill
-                RemoveMatches();
+                var removed = RemoveMatches();
+                if (removed > 0)
+                {
+                    CollapseColumnsDownward();
+                    //TODO: Loop Match and refill cycle
+                }
             }
 
             UnlockInput();
@@ -455,6 +459,54 @@ namespace ColorMatchRush
 
             return removed;
         }
+        #endregion
+
+        #region Gravity & Refill
+
+        [Header("Resolve")]
+        [SerializeField, Tooltip("Seconds to move per falling step.")]
+        private float fallMoveDuration = 0.08f;
+
+        /// <summary>
+        /// Collapse all columns downward using a write-pointer per column.
+        /// Returns true if any piece moved.
+        /// </summary>
+        public bool CollapseColumnsDownward()
+        {
+            if (grid == null) return false;
+
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+            bool anyMoved = false;
+
+            for (int c = 0; c < w; c++)
+            {
+                int write = 0; // next row to fill in this column (from bottom)
+                for (int r = 0; r < h; r++)
+                {
+                    var piece = grid[r, c];
+                    if (piece == null) continue;
+
+                    if (r != write)
+                    {
+                        // move down
+                        grid[write, c] = piece;
+                        grid[r, c] = null;
+
+                        piece.SetGridIndex(write, c);
+                        piece.MoveTo(CellToWorld(write, c), fallMoveDuration);
+
+                        anyMoved = true;
+                    }
+                    write++;
+                }
+
+                // cells [write..h-1] stay null (to be refilled later)
+            }
+
+            return anyMoved;
+        }
+
         #endregion
 
 #if UNITY_EDITOR

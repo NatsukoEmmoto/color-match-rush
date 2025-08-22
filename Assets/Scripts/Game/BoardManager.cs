@@ -284,6 +284,93 @@ namespace ColorMatchRush
                 if (ic) ic.SetInputLock(false);
             }
         }
+
+        /// <summary>
+        /// Scans the entire board for sequences of 3 or more same-type pieces.
+        /// Returns a collection of all matched positions (both horizontal and vertical matches).
+        /// </summary>
+        /// <returns>HashSet of grid positions (Vector2Int) that are part of matches. x=column, y=row.</returns>
+        public HashSet<Vector2Int> FindAllMatches()
+        {
+            if (grid == null) return new HashSet<Vector2Int>();
+            
+            var matchedPositions = new HashSet<Vector2Int>();
+            
+            // Scan horizontally (rows)
+            for (int row = 0; row < height; row++)
+            {
+                ScanLineForMatches(row, 0, 0, 1, matchedPositions); // row, startCol, deltaRow, deltaCol
+            }
+            
+            // Scan vertically (columns)
+            for (int col = 0; col < width; col++)
+            {
+                ScanLineForMatches(0, col, 1, 0, matchedPositions); // startRow, col, deltaRow, deltaCol
+            }
+            
+            return matchedPositions;
+        }
+
+        /// <summary>
+        /// Scans a single line (row or column) for sequences of 3+ same-type pieces.
+        /// </summary>
+        /// <param name="startRow">Starting row position</param>
+        /// <param name="startCol">Starting column position</param>
+        /// <param name="deltaRow">Row increment per step (1 for vertical scan, 0 for horizontal)</param>
+        /// <param name="deltaCol">Column increment per step (1 for horizontal scan, 0 for vertical)</param>
+        /// <param name="matchedPositions">HashSet to add matched positions to</param>
+        private void ScanLineForMatches(int startRow, int startCol, int deltaRow, int deltaCol, HashSet<Vector2Int> matchedPositions)
+        {
+            int currentRow = startRow;
+            int currentCol = startCol;
+            
+            while (currentRow < height && currentCol < width)
+            {
+                var currentPiece = grid[currentRow, currentCol];
+                
+                // Skip null pieces
+                if (currentPiece == null)
+                {
+                    currentRow += deltaRow;
+                    currentCol += deltaCol;
+                    continue;
+                }
+                
+                var currentType = currentPiece.Type;
+                var sequencePositions = new List<Vector2Int>();
+                sequencePositions.Add(new Vector2Int(currentCol, currentRow));
+                
+                // Continue scanning in the same direction while pieces match
+                int nextRow = currentRow + deltaRow;
+                int nextCol = currentCol + deltaCol;
+                
+                while (nextRow < height && nextCol < width)
+                {
+                    var nextPiece = grid[nextRow, nextCol];
+                    
+                    // Break if null or different type
+                    if (nextPiece == null || nextPiece.Type != currentType)
+                        break;
+                    
+                    sequencePositions.Add(new Vector2Int(nextCol, nextRow));
+                    nextRow += deltaRow;
+                    nextCol += deltaCol;
+                }
+                
+                // If sequence is 3 or more, add all positions to matched set
+                if (sequencePositions.Count >= 3)
+                {
+                    foreach (var pos in sequencePositions)
+                    {
+                        matchedPositions.Add(pos);
+                    }
+                }
+                
+                // Move to the next position after the sequence
+                currentRow = nextRow;
+                currentCol = nextCol;
+            }
+        }
         #endregion
 
 

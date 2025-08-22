@@ -314,7 +314,7 @@ GameObject:
   - component: {fileID: 1545997792}
   - component: {fileID: 1545997791}
   m_Layer: 0
-  m_Name: ImputController
+  m_Name: InputController
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

@@ -235,6 +235,11 @@ namespace ColorMatchRush
                 
                 yield return WaitUntilPiecesStop(a, b);
             }
+            else
+            {
+                //TODO: Handle match and refill
+                RemoveMatches();
+            }
 
             UnlockInput();
             swapInProgress = false;
@@ -286,7 +291,113 @@ namespace ColorMatchRush
         }
         #endregion
 
+        #region Match Handling
 
+        /// <summary>
+        /// Scan the entire grid horizontally and vertically,
+        /// collecting all pieces that belong to runs with length >= 3.
+        /// Uses a HashSet to avoid duplicates (overlapping H/V runs).
+        /// Null-safe: skips empty cells.
+        /// </summary>
+        public HashSet<Piece> FindAllMatches()
+        {
+            var result = new HashSet<Piece>();
+            if (grid == null) return result;
+
+            // Horizontal scan (rows)
+            for (int r = 0; r < height; r++)
+            {
+                int c = 0;
+                while (c < width)
+                {
+                    Piece start = grid[r, c];
+                    if (start == null) { c++; continue; }
+
+                    int runStart = c;
+                    int runLen = 1;
+
+                    // grow run while same type
+                    while (c + runLen < width)
+                    {
+                        var next = grid[r, c + runLen];
+                        if (next == null || next.Type != start.Type) break;
+                        runLen++;
+                    }
+
+                    if (runLen >= 3)
+                    {
+                        for (int k = 0; k < runLen; k++)
+                        {
+                            var p = grid[r, runStart + k];
+                            if (p != null) result.Add(p);
+                        }
+                    }
+
+                    c += runLen; // jump to next segment
+                }
+            }
+
+            // Vertical scan (columns)
+            for (int c = 0; c < width; c++)
+            {
+                int r = 0;
+                while (r < height)
+                {
+                    Piece start = grid[r, c];
+                    if (start == null) { r++; continue; }
+
+                    int runStart = r;
+                    int runLen = 1;
+
+                    while (r + runLen < height)
+                    {
+                        var next = grid[r + runLen, c];
+                        if (next == null || next.Type != start.Type) break;
+                        runLen++;
+                    }
+
+                    if (runLen >= 3)
+                    {
+                        for (int k = 0; k < runLen; k++)
+                        {
+                            var p = grid[runStart + k, c];
+                            if (p != null) result.Add(p);
+                        }
+                    }
+
+                    r += runLen;
+                }
+            }
+
+            return result;
+        }
+        
+        /// <summary>
+        /// Find all matches, destroy matched pieces, and clear their grid cells.
+        /// Returns number of pieces removed.
+        /// </summary>
+        public int RemoveMatches()
+        {
+            var matches = FindAllMatches();
+            if (matches == null || matches.Count == 0)
+                return 0;
+
+            int removed = 0;
+            foreach (var piece in matches)
+            {
+                if (piece == null) continue;
+
+                // Clear from grid
+                grid[piece.Row, piece.Column] = null;
+
+                // Destroy game object
+                Destroy(piece.gameObject);
+                removed++;
+            }
+
+            return removed;
+        }
+        #endregion
 
 #if UNITY_EDITOR
         private void OnDrawGizmos()

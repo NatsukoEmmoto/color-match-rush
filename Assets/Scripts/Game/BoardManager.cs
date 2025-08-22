@@ -294,30 +294,44 @@ namespace ColorMatchRush
         #region Match Handling
 
         /// <summary>
+        /// Helper to validate indices against the current grid size.
+        /// </summary>
+        private bool IsInBounds(int row, int col)
+        {
+            return grid != null &&
+                   row >= 0 && row < grid.GetLength(0) &&
+                   col >= 0 && col < grid.GetLength(1);
+        }
+
+        /// <summary>
         /// Scan the entire grid horizontally and vertically,
         /// collecting all pieces that belong to runs with length >= 3.
         /// Uses a HashSet to avoid duplicates (overlapping H/V runs).
-        /// Null-safe: skips empty cells.
         /// </summary>
         public HashSet<Piece> FindAllMatches()
         {
             var result = new HashSet<Piece>();
-            if (grid == null) return result;
+            if (grid == null)
+                return result;
+
+            // Use actual grid dimensions (defensive against width/height mismatches)
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
 
             // Horizontal scan (rows)
-            for (int r = 0; r < height; r++)
+            for (int r = 0; r < h; r++)
             {
                 int c = 0;
-                while (c < width)
+                while (c < w)
                 {
-                    Piece start = grid[r, c];
+                    var start = grid[r, c];
                     if (start == null) { c++; continue; }
 
                     int runStart = c;
                     int runLen = 1;
 
                     // grow run while same type
-                    while (c + runLen < width)
+                    while (c + runLen < w)
                     {
                         var next = grid[r, c + runLen];
                         if (next == null || next.Type != start.Type) break;
@@ -338,18 +352,18 @@ namespace ColorMatchRush
             }
 
             // Vertical scan (columns)
-            for (int c = 0; c < width; c++)
+            for (int c = 0; c < w; c++)
             {
                 int r = 0;
-                while (r < height)
+                while (r < h)
                 {
-                    Piece start = grid[r, c];
+                    var start = grid[r, c];
                     if (start == null) { r++; continue; }
 
                     int runStart = r;
                     int runLen = 1;
 
-                    while (r + runLen < height)
+                    while (r + runLen < h)
                     {
                         var next = grid[r + runLen, c];
                         if (next == null || next.Type != start.Type) break;
@@ -374,23 +388,50 @@ namespace ColorMatchRush
         
         /// <summary>
         /// Find all matches, destroy matched pieces, and clear their grid cells.
-        /// Returns number of pieces removed.
         /// </summary>
         public int RemoveMatches()
         {
             var matches = FindAllMatches();
-            if (matches == null || matches.Count == 0)
-                return 0;
+            if (matches == null || matches.Count == 0) return 0;
 
             int removed = 0;
+            int h = grid?.GetLength(0) ?? 0;
+            int w = grid?.GetLength(1) ?? 0;
+
             foreach (var piece in matches)
             {
                 if (piece == null) continue;
 
-                // Clear from grid
-                grid[piece.Row, piece.Column] = null;
+                bool cleared = false;
 
-                // Destroy game object
+                // Try by declared indices first
+                int r = piece.Row, c = piece.Column;
+                if (grid != null && IsInBounds(r, c) && (grid[r, c] == null || grid[r, c] == piece))
+                {
+                    grid[r, c] = null;
+                    cleared = true;
+                }
+
+                // Fallback: locate exact instance in the grid
+                if (!cleared && grid != null)
+                {
+                    for (int rr = 0; rr < h && !cleared; rr++)
+                    {
+                        for (int cc = 0; cc < w && !cleared; cc++)
+                        {
+                            if (grid[rr, cc] == piece)
+                            {
+                                grid[rr, cc] = null;
+                                cleared = true;
+                            }
+                        }
+                    }
+        #if UNITY_EDITOR
+                    if (!cleared)
+                        Debug.LogWarning($"[BoardManager] Matched piece not found in grid (id={piece.GetInstanceID()}).");
+        #endif
+                }
+
                 Destroy(piece.gameObject);
                 removed++;
             }

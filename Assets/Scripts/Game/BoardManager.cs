@@ -177,6 +177,9 @@ namespace ColorMatchRush
         [SerializeField, Tooltip("Seconds to move per swap/bounce.")]
         private float swapMoveDuration = 0.12f;
         [SerializeField] private bool swapInProgress = false;
+        [SerializeField, Tooltip("True while the board is resolving matches/cascades.")]
+        private bool isResolving = false;
+        public bool IsResolving => isResolving;
 
         private InputController inputController;
         public void SetInputController(InputController controller) => inputController = controller;
@@ -191,6 +194,7 @@ namespace ColorMatchRush
 
         public bool TrySwap(Piece a, Piece b)
         {
+            if (isResolving) return false;
             if (swapInProgress) return false;
             if (a == null || b == null || a == b) return false;
             if (!AreAdjacent(a, b)) return false;
@@ -237,17 +241,9 @@ namespace ColorMatchRush
             }
             else
             {
-                var removed = RemoveMatches();
-                if (removed > 0)
-                {
-                    CollapseColumnsDownward();
-                    yield return WaitUntilAllPiecesStop();
-
-                    RefillNewPiecesFromTop();
-                    yield return WaitUntilAllPiecesStop();
-
-                    //TODO: Loop Match and refill cycle
-                }
+                isResolving = true;
+                yield return ResolveBoardLoop();
+                isResolving = false;
             }
 
             UnlockInput();
@@ -584,6 +580,34 @@ namespace ColorMatchRush
         }
 
         #endregion
+
+        /// <summary>
+        /// Resolve the board by repeatedly removing matches, collapsing, and refilling
+        /// until no further matches exist. Keeps input locked via outer context.
+        /// </summary>
+        private System.Collections.IEnumerator ResolveBoardLoop()
+        {
+            const int safetyMax = 64; // prevent infinite loops
+            int iterations = 0;
+
+            while (iterations++ < safetyMax)
+            {
+                // 1) Remove current matches
+                int removed = RemoveMatches();
+                if (removed <= 0)
+                    break; // stable: no more matches
+
+                // 2) Collapse gravity
+                CollapseColumnsDownward();
+                yield return WaitUntilAllPiecesStop();
+
+                // 3) Refill from top
+                RefillNewPiecesFromTop();
+                yield return WaitUntilAllPiecesStop();
+
+                // loop; newly formed matches (cascades) will be removed next iteration
+            }
+        }
 
 #if UNITY_EDITOR
         private void OnDrawGizmos()

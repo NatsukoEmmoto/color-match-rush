@@ -32,6 +32,8 @@ namespace ColorMatchRush
         private int randomSeed = 0;
         [SerializeField, Tooltip("Avoid 3-in-a-row/column at startup.")]
         private bool preventInstantMatchesOnStart = true;
+        [SerializeField, Tooltip("Maximum times to regenerate board to avoid instant matches.")]
+        private int maxInstantMatchRegenerations = 5;
 
         // Grid storage (row-major: [row, column])
         private Piece[,] grid;

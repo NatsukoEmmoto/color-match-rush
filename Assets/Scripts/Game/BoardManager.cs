@@ -677,6 +677,138 @@ namespace ColorMatchRush
 
         #endregion
 
+        #region Shuffle & Deadboard
+
+        /// <summary>
+        /// Return true if there exists at least one adjacent swap that would create a match.
+        /// We simulate a swap in the grid (no animation), check, then revert.
+        /// </summary>
+        public bool HasAnyValidMove()
+        {
+            if (grid == null) return false;
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+
+            for (int r = 0; r < h; r++)
+            {
+                for (int c = 0; c < w; c++)
+                {
+                    var a = grid[r, c];
+                    if (a == null) continue;
+
+                    // Right neighbor
+                    if (c + 1 < w && grid[r, c + 1] != null)
+                    {
+                        if (SwapWouldCreateMatch(r, c, r, c + 1)) return true;
+                    }
+                    // Up neighbor
+                    if (r + 1 < h && grid[r + 1, c] != null)
+                    {
+                        if (SwapWouldCreateMatch(r, c, r + 1, c)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Temporarily swap grid cells (r1,c1) and (r2,c2), check if either cell creates a match, then revert.
+        /// </summary>
+        private bool SwapWouldCreateMatch(int r1, int c1, int r2, int c2)
+        {
+            var p1 = grid[r1, c1];
+            var p2 = grid[r2, c2];
+            if (p1 == null || p2 == null) return false;
+
+            // swap in place (no animation)
+            grid[r1, c1] = p2; grid[r2, c2] = p1;
+
+            bool created =
+                CreatesMatchAt(r1, c1) ||
+                CreatesMatchAt(r2, c2);
+
+            // revert
+            grid[r1, c1] = p1; grid[r2, c2] = p2;
+            return created;
+        }
+
+        /// <summary>
+        /// Shuffle the existing pieces randomly across the grid and animate them to their new cells.
+        /// Ensures the result is not an instant-match board and (optionally) has at least one valid move.
+        /// Returns true if a shuffle was performed.
+        /// </summary>
+        public bool ShuffleBoard(int maxAttempts = 20, bool requireValidMove = true)
+        {
+            if (grid == null) return false;
+
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+
+            // Collect current non-null pieces
+            var pieces = new List<Piece>(h * w);
+            for (int r = 0; r < h; r++)
+                for (int c = 0; c < w; c++)
+                    if (grid[r, c] != null) pieces.Add(grid[r, c]);
+
+            if (pieces.Count <= 1) return false;
+
+            // Try a few shuffles until constraints are satisfied
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                // Fisher–Yates shuffle
+                for (int i = pieces.Count - 1; i > 0; i--)
+                {
+                    int j = Random.Range(0, i + 1);
+                    (pieces[i], pieces[j]) = (pieces[j], pieces[i]);
+                }
+
+                // Place into grid (no animation yet)
+                int idx = 0;
+                for (int r = 0; r < h; r++)
+                {
+                    for (int c = 0; c < w; c++)
+                    {
+                        var p = (idx < pieces.Count) ? pieces[idx++] : null;
+                        grid[r, c] = p;
+                        if (p != null) p.SetGridIndex(r, c); // keep indices in sync
+                    }
+                }
+
+                // If startup-avoid flag is ON, ensure we don't start with matches
+                var matches = FindAllMatches();
+                if (matches != null && matches.Count > 0)
+                    continue; // try another shuffle to avoid instant matches
+
+                if (requireValidMove && !HasAnyValidMove())
+                    continue; // deadboard again, reshuffle
+
+                // Success: animate to new cells
+                for (int r = 0; r < h; r++)
+                for (int c = 0; c < w; c++)
+                {
+                    var p = grid[r, c];
+                    if (p != null)
+                        p.MoveTo(CellToWorld(r, c), fallMoveDuration);
+                }
+
+                return true;
+            }
+
+            Debug.LogWarning("[BoardManager] ShuffleBoard() fell back after max attempts; applying last layout anyway.");
+            // Animate last attempt so board doesn't look frozen
+            for (int r = 0; r < grid.GetLength(0); r++)
+            for (int c = 0; c < grid.GetLength(1); c++)
+            {
+                var p = grid[r, c];
+                if (p != null)
+                    p.MoveTo(CellToWorld(r, c), fallMoveDuration);
+            }
+            return true;
+        }
+
+        #endregion
+
+
         /// <summary>
         /// Resolve the board by repeatedly removing matches, collapsing, and refilling
         /// until no further matches exist. Keeps input locked via outer context.
@@ -700,6 +832,14 @@ namespace ColorMatchRush
                 // 3) Refill from top
                 RefillNewPiecesFromTop();
                 yield return WaitUntilAllPiecesStop();
+
+                // 4) Shuffle if no valid moves
+                if (!HasAnyValidMove())
+                {
+                    ShuffleBoard();
+                    yield return WaitUntilAllPiecesStop();
+                    // After animation, board will have at least one move (best-effort)
+                }
 
                 // loop; newly formed matches (cascades) will be removed next iteration
             }

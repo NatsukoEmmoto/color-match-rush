@@ -120,10 +120,10 @@ namespace ColorMatchRush
                 return null;
             }
 
-            const int maxAttempts = 12;
+            const int MaxAttemptsToAvoidInstantMatch = 12;
             Piece lastTried = null;
 
-            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            for (int attempt = 0; attempt < MaxAttemptsToAvoidInstantMatch; attempt++)
             {
                 int idx = Random.Range(0, piecePrefabs.Length);
                 var prefab = piecePrefabs[idx];

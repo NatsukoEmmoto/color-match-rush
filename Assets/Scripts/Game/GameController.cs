@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace ColorMatchRush
@@ -15,6 +16,7 @@ namespace ColorMatchRush
         private float remainingTime;
         private bool isRunning = false;
         public float RemainingTime => remainingTime;
+        public event Action<float> OnTimerChanged;
 
         private void Awake()
         {
@@ -37,7 +39,12 @@ namespace ColorMatchRush
         {
             if (!isRunning) return;
 
+            float oldTime = remainingTime;
             remainingTime -= Time.deltaTime;
+
+            if (Mathf.FloorToInt(oldTime) != Mathf.FloorToInt(remainingTime))
+                OnTimerChanged?.Invoke(remainingTime);
+
             if (remainingTime <= 0f)
             {
                 remainingTime = 0f;

@@ -165,6 +165,12 @@ MonoBehaviour:
   explicitOrigin: {x: 0, y: 0}
   generateOnStart: 1
   randomSeed: 0
+  preventInstantMatchesOnStart: 1
+  swapMoveDuration: 0.12
+  swapInProgress: 0
+  isResolving: 0
+  fallMoveDuration: 0.25
+  spawnOvershootCells: 1
 --- !u!4 &350540675
 Transform:
   m_ObjectHideFlags: 0

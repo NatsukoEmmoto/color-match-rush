@@ -30,6 +30,10 @@ namespace ColorMatchRush
         private bool generateOnStart = true;
         [SerializeField, Tooltip("Optional random seed for repeatable boards. 0 = random.")]
         private int randomSeed = 0;
+        [SerializeField, Tooltip("Avoid 3-in-a-row/column at startup.")]
+        private bool preventInstantMatchesOnStart = true;
+        [SerializeField, Tooltip("Maximum times to regenerate board to avoid instant matches.")]
+        private int maxInstantMatchRegenerations = 5;
 
         // Grid storage (row-major: [row, column])
         private Piece[,] grid;
@@ -68,10 +72,102 @@ namespace ColorMatchRush
         public void GenerateBoard()
         {
             if (randomSeed != 0)
-            {
                 Random.InitState(randomSeed);
+
+            // First pass: build with or without instant-match avoidance
+            GenerateBoardInternal(preventInstantMatchesOnStart);
+
+            // Safety pass: if anything slipped through, try a few regenerations
+            if (preventInstantMatchesOnStart)
+                EnsureNoInstantMatches();
+        }
+        /// <summary>
+        /// Returns true if placing a piece of the given type at (row,col)
+        /// would immediately create a 3+ match with already-placed neighbors.
+        /// Assumes generation order is from bottom to top, left to right.
+        /// Checks only left and down directions (already filled cells).
+        /// </summary>
+        private bool WouldCreateInstantMatchAt(int row, int col, Piece.PieceType type)
+        {
+            // Horizontal check: left two
+            if (col >= 2)
+            {
+                var p1 = grid[row, col - 1];
+                var p2 = grid[row, col - 2];
+                if (p1 != null && p2 != null && p1.Type == type && p2.Type == type)
+                    return true;
             }
 
+            // Vertical check: down two
+            if (row >= 2)
+            {
+                var p1 = grid[row - 1, col];
+                var p2 = grid[row - 2, col];
+                if (p1 != null && p2 != null && p1.Type == type && p2.Type == type)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Pick a random prefab that does NOT cause an instant 3-match at (row,col).
+        /// Tries a limited number of attempts and falls back to any random prefab if needed.
+        /// </summary>
+        private Piece GetRandomPrefabAvoidingInstantMatch(int row, int col)
+        {
+            if (piecePrefabs == null || piecePrefabs.Length == 0)
+            {
+                Debug.LogError("[BoardManager] piecePrefabs not assigned or empty.");
+                return null;
+            }
+
+            const int MaxAttemptsToAvoidInstantMatch = 12;
+            Piece lastTried = null;
+
+            for (int attempt = 0; attempt < MaxAttemptsToAvoidInstantMatch; attempt++)
+            {
+                int idx = Random.Range(0, piecePrefabs.Length);
+                var prefab = piecePrefabs[idx];
+                if (prefab == null) continue;
+                lastTried = prefab;
+                if (!WouldCreateInstantMatchAt(row, col, prefab.Type))
+                    return prefab;
+            }
+
+            // Fallback: return the last tried valid prefab even if it matches (very unlikely with 5 colors)
+            if (lastTried == null)
+                Debug.LogError("[BoardManager] Failed to choose a valid prefab (all null?).");
+            else
+                Debug.LogWarning($"[BoardManager] Fallback to potentially matching prefab at ({row},{col}).");
+
+            return lastTried;
+        }
+
+        /// <summary>
+        /// Ensure the current grid has no instant matches; if found, regenerates up to a few attempts.
+        /// This is only used at startup for safety; normal play uses resolve loop.
+        /// </summary>
+        private void EnsureNoInstantMatches()
+        {
+            if (!preventInstantMatchesOnStart || grid == null) return;
+
+            for (int i = 0; i < maxInstantMatchRegenerations; i++)
+            {
+                var matches = FindAllMatches();
+                if (matches == null || matches.Count == 0) return; // already clean
+
+                // Re-generate with the avoidance picker to try a clean board
+                Debug.LogWarning($"[BoardManager] Instant matches detected at start. Regenerating (attempt {i + 1}/{maxInstantMatchRegenerations})...");
+                GenerateBoardInternal(avoidInstantMatches: true);
+            }
+        }
+
+        /// <summary>
+        /// Internal generator with a switch to avoid instant matches during placement.
+        /// </summary>
+        private void GenerateBoardInternal(bool avoidInstantMatches)
+        {
             ComputeOrigin();
             ClearBoardImmediate();
 
@@ -81,18 +177,19 @@ namespace ColorMatchRush
             {
                 for (int column = 0; column < width; column++)
                 {
-                    Piece prefab = GetRandomPiecePrefab();
+                    Piece prefab = avoidInstantMatches
+                        ? GetRandomPrefabAvoidingInstantMatch(row, column)
+                        : GetRandomPiecePrefab();
+
                     if (prefab == null)
                     {
                         Debug.LogError($"[BoardManager] Failed to get valid prefab for position ({row}, {column}). Skipping cell.");
-                        continue; // Skip this cell, leave it null in the grid
+                        continue; // leave null
                     }
-                    
-                    Piece piece = Instantiate(prefab, boardRoot);
 
+                    Piece piece = Instantiate(prefab, boardRoot);
                     Vector3 worldPos = CellToWorld(row, column);
                     piece.Initialize(row, column, prefab.Type, worldPos);
-
                     grid[row, column] = piece;
                 }
             }
@@ -177,6 +274,9 @@ namespace ColorMatchRush
         [SerializeField, Tooltip("Seconds to move per swap/bounce.")]
         private float swapMoveDuration = 0.12f;
         [SerializeField] private bool swapInProgress = false;
+        [SerializeField, Tooltip("True while the board is resolving matches/cascades.")]
+        private bool isResolving = false;
+        public bool IsResolving => isResolving;
 
         private InputController inputController;
         public void SetInputController(InputController controller) => inputController = controller;
@@ -191,6 +291,7 @@ namespace ColorMatchRush
 
         public bool TrySwap(Piece a, Piece b)
         {
+            if (isResolving) return false;
             if (swapInProgress) return false;
             if (a == null || b == null || a == b) return false;
             if (!AreAdjacent(a, b)) return false;
@@ -237,8 +338,9 @@ namespace ColorMatchRush
             }
             else
             {
-                //TODO: Handle match and refill
-                RemoveMatches();
+                isResolving = true;
+                yield return ResolveBoardLoop();
+                isResolving = false;
             }
 
             UnlockInput();
@@ -456,6 +558,293 @@ namespace ColorMatchRush
             return removed;
         }
         #endregion
+
+        #region Gravity & Refill
+
+        [Header("Resolve")]
+        [SerializeField, Tooltip("Seconds to move per falling step.")]
+        private float fallMoveDuration = 0.08f;
+        
+        [SerializeField, Tooltip("How many cells above the top to spawn new pieces before falling.")]
+        private float spawnOvershootCells = 1f;
+
+        /// <summary>
+        /// Collapse all columns downward using a write-pointer per column.
+        /// Returns true if any piece moved.
+        /// </summary>
+        public bool CollapseColumnsDownward()
+        {
+            if (grid == null) return false;
+
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+            bool anyMoved = false;
+
+            for (int c = 0; c < w; c++)
+            {
+                int write = 0; // next row to fill in this column (from bottom)
+                for (int r = 0; r < h; r++)
+                {
+                    var piece = grid[r, c];
+                    if (piece == null) continue;
+
+                    if (r != write)
+                    {
+                        // move down
+                        grid[write, c] = piece;
+                        grid[r, c] = null;
+
+                        piece.SetGridIndex(write, c);
+                        piece.MoveTo(CellToWorld(write, c), fallMoveDuration);
+
+                        anyMoved = true;
+                    }
+                    write++;
+                }
+
+                // cells [write..h-1] stay null (to be refilled later)
+            }
+
+            return anyMoved;
+        }
+        
+        /// <summary>
+        /// Refill empty cells by spawning new pieces above the top row and animating them down.
+        /// Returns true if any piece was spawned.
+        /// </summary>
+        public bool RefillNewPiecesFromTop()
+        {
+            if (grid == null) return false;
+
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+            bool anySpawned = false;
+
+            for (int c = 0; c < w; c++)
+            {
+                for (int r = h - 1; r >= 0; r--)
+                {
+                    if (grid[r, c] != null) continue;
+
+                    // pick a random prefab
+                    Piece prefab = GetRandomPiecePrefab();
+                    if (prefab == null) continue;
+
+                    // spawn slightly above the target cell and fall down
+                    Vector3 targetWorld = CellToWorld(r, c);
+                    Vector3 startWorld = targetWorld + new Vector3(0f, cellSize * spawnOvershootCells, 0f);
+
+                    Piece piece = Instantiate(prefab, boardRoot);
+                    piece.Initialize(r, c, prefab.Type, startWorld);
+
+                    grid[r, c] = piece;
+                    piece.MoveTo(targetWorld, fallMoveDuration);
+
+                    anySpawned = true;
+                }
+            }
+
+            return anySpawned;
+        }
+
+        /// <summary>
+        /// Wait until all pieces in the grid finish moving.
+        /// </summary>
+        private System.Collections.IEnumerator WaitUntilAllPiecesStop()
+        {
+            if (grid == null) yield break;
+
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+
+            while (true)
+            {
+                bool anyMoving = false;
+
+                for (int r = 0; r < h && !anyMoving; r++)
+                {
+                    for (int c = 0; c < w && !anyMoving; c++)
+                    {
+                        var p = grid[r, c];
+                        if (p != null && p.IsMoving)
+                            anyMoving = true;
+                    }
+                }
+
+                if (!anyMoving) yield break;
+                yield return null;
+            }
+        }
+
+        #endregion
+
+        #region Shuffle & Deadboard
+
+        /// <summary>
+        /// Return true if there exists at least one adjacent swap that would create a match.
+        /// We simulate a swap in the grid (no animation), check, then revert.
+        /// </summary>
+        public bool HasAnyValidMove()
+        {
+            if (grid == null) return false;
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+
+            for (int r = 0; r < h; r++)
+            {
+                for (int c = 0; c < w; c++)
+                {
+                    var a = grid[r, c];
+                    if (a == null) continue;
+
+                    // Right neighbor
+                    if (c + 1 < w && grid[r, c + 1] != null)
+                    {
+                        if (SwapWouldCreateMatch(r, c, r, c + 1)) return true;
+                    }
+                    // Up neighbor
+                    if (r + 1 < h && grid[r + 1, c] != null)
+                    {
+                        if (SwapWouldCreateMatch(r, c, r + 1, c)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Temporarily swap grid cells (r1,c1) and (r2,c2), check if either cell creates a match, then revert.
+        /// </summary>
+        private bool SwapWouldCreateMatch(int r1, int c1, int r2, int c2)
+        {
+            var p1 = grid[r1, c1];
+            var p2 = grid[r2, c2];
+            if (p1 == null || p2 == null) return false;
+
+            // swap in place (no animation)
+            grid[r1, c1] = p2; grid[r2, c2] = p1;
+
+            bool created =
+                CreatesMatchAt(r1, c1) ||
+                CreatesMatchAt(r2, c2);
+
+            // revert
+            grid[r1, c1] = p1; grid[r2, c2] = p2;
+            return created;
+        }
+
+        /// <summary>
+        /// Shuffle the existing pieces randomly across the grid and animate them to their new cells.
+        /// Ensures the result is not an instant-match board and (optionally) has at least one valid move.
+        /// Returns true if a shuffle was performed.
+        /// </summary>
+        public bool ShuffleBoard(int maxAttempts = 20, bool requireValidMove = true)
+        {
+            if (grid == null) return false;
+
+            int h = grid.GetLength(0);
+            int w = grid.GetLength(1);
+
+            // Collect current non-null pieces
+            var pieces = new List<Piece>(h * w);
+            for (int r = 0; r < h; r++)
+                for (int c = 0; c < w; c++)
+                    if (grid[r, c] != null) pieces.Add(grid[r, c]);
+
+            if (pieces.Count <= 1) return false;
+
+            // Try a few shuffles until constraints are satisfied
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                // Fisher–Yates shuffle
+                for (int i = pieces.Count - 1; i > 0; i--)
+                {
+                    int j = Random.Range(0, i + 1);
+                    (pieces[i], pieces[j]) = (pieces[j], pieces[i]);
+                }
+
+                // Place into grid (no animation yet)
+                int idx = 0;
+                for (int r = 0; r < h; r++)
+                {
+                    for (int c = 0; c < w; c++)
+                    {
+                        var p = (idx < pieces.Count) ? pieces[idx++] : null;
+                        grid[r, c] = p;
+                        if (p != null) p.SetGridIndex(r, c); // keep indices in sync
+                    }
+                }
+
+                // If startup-avoid flag is ON, ensure we don't start with matches
+                var matches = FindAllMatches();
+                if (matches != null && matches.Count > 0)
+                    continue; // try another shuffle to avoid instant matches
+
+                if (requireValidMove && !HasAnyValidMove())
+                    continue; // deadboard again, reshuffle
+
+                // Success: animate to new cells
+                for (int r = 0; r < h; r++)
+                for (int c = 0; c < w; c++)
+                {
+                    var p = grid[r, c];
+                    if (p != null)
+                        p.MoveTo(CellToWorld(r, c), fallMoveDuration);
+                }
+
+                return true;
+            }
+
+            Debug.LogWarning("[BoardManager] ShuffleBoard() fell back after max attempts; applying last layout anyway.");
+            // Animate last attempt so board doesn't look frozen
+            for (int r = 0; r < grid.GetLength(0); r++)
+            for (int c = 0; c < grid.GetLength(1); c++)
+            {
+                var p = grid[r, c];
+                if (p != null)
+                    p.MoveTo(CellToWorld(r, c), fallMoveDuration);
+            }
+            return true;
+        }
+
+        #endregion
+
+
+        /// <summary>
+        /// Resolve the board by repeatedly removing matches, collapsing, and refilling
+        /// until no further matches exist. Keeps input locked via outer context.
+        /// </summary>
+        private System.Collections.IEnumerator ResolveBoardLoop()
+        {
+            const int safetyMax = 64; // prevent infinite loops
+            int iterations = 0;
+
+            while (iterations++ < safetyMax)
+            {
+                // 1) Remove current matches
+                int removed = RemoveMatches();
+                if (removed <= 0)
+                    break; // stable: no more matches
+
+                // 2) Collapse gravity
+                CollapseColumnsDownward();
+                yield return WaitUntilAllPiecesStop();
+
+                // 3) Refill from top
+                RefillNewPiecesFromTop();
+                yield return WaitUntilAllPiecesStop();
+
+                // 4) Shuffle if no valid moves
+                if (!HasAnyValidMove())
+                {
+                    ShuffleBoard();
+                    yield return WaitUntilAllPiecesStop();
+                    // After animation, board will have at least one move (best-effort)
+                }
+
+                // loop; newly formed matches (cascades) will be removed next iteration
+            }
+        }
 
 #if UNITY_EDITOR
         private void OnDrawGizmos()

@@ -150,14 +150,13 @@ namespace ColorMatchRush
         {
             if (!preventInstantMatchesOnStart || grid == null) return;
 
-            const int maxRegen = 5;
-            for (int i = 0; i < maxRegen; i++)
+            for (int i = 0; i < maxInstantMatchRegenerations; i++)
             {
                 var matches = FindAllMatches();
                 if (matches == null || matches.Count == 0) return; // already clean
 
                 // Re-generate with the avoidance picker to try a clean board
-                Debug.LogWarning($"[BoardManager] Instant matches detected at start. Regenerating (attempt {i + 1}/{maxRegen})...");
+                Debug.LogWarning($"[BoardManager] Instant matches detected at start. Regenerating (attempt {i + 1}/{maxInstantMatchRegenerations})...");
                 GenerateBoardInternal(avoidInstantMatches: true);
             }
         }

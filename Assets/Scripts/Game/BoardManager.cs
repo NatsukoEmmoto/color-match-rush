@@ -832,15 +832,18 @@ namespace ColorMatchRush
                 if (removed <= 0)
                     break; // stable: no more matches
 
-                // 2) Collapse gravity
+                // 2) Add score
+                ScoreManager.Instance?.AddScore(removed);
+
+                // 3) Collapse gravity
                 CollapseColumnsDownward();
                 yield return WaitUntilAllPiecesStop();
 
-                // 3) Refill from top
+                // 4) Refill from top
                 RefillNewPiecesFromTop();
                 yield return WaitUntilAllPiecesStop();
 
-                // 4) Shuffle if no valid moves
+                // 5) Shuffle if no valid moves
                 if (!HasAnyValidMove())
                 {
                     ShuffleBoard();

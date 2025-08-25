@@ -3,11 +3,14 @@ using System;
 
 namespace ColorMatchRush
 {
+
     /// <summary>
     /// Holds the current score and notifies listeners on change.
     /// </summary>
     public class ScoreManager : MonoBehaviour
     {
+        [SerializeField] private int scorePerPiece = 5;
+
         public static ScoreManager Instance { get; private set; }
 
         public event Action<int> OnScoreChanged;
@@ -24,16 +27,16 @@ namespace ColorMatchRush
             Instance = this;
         }
 
-        public void ResetScore()
+        public void AddScore(int matchedPieces)
         {
-            CurrentScore = 0;
+            int add = matchedPieces * scorePerPiece;
+            CurrentScore += add;
             OnScoreChanged?.Invoke(CurrentScore);
         }
 
-        public void AddScore(int points)
+        public void ResetScore()
         {
-            if (points <= 0) return;
-            CurrentScore += points;
+            CurrentScore = 0;
             OnScoreChanged?.Invoke(CurrentScore);
         }
     }

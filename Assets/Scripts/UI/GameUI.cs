@@ -11,12 +11,7 @@ namespace ColorMatchRush
     {
         [Header("Refs")]
         [SerializeField] private TMP_Text timerText;
-
-        private void Reset()
-        {
-            if (timerText == null)
-                timerText = GetComponentInChildren<TMP_Text>();
-        }
+        [SerializeField] private TMP_Text scoreText;
 
         private void Start()
         {
@@ -24,6 +19,12 @@ namespace ColorMatchRush
             {
                 GameController.Instance.OnTimerChanged += UpdateTimerText;
                 UpdateTimerText(GameController.Instance.RemainingTime);
+            }
+            
+            if (ScoreManager.Instance != null)
+            {
+                ScoreManager.Instance.OnScoreChanged += UpdateScoreText;
+                UpdateScoreText(ScoreManager.Instance.CurrentScore);
             }
         }
 
@@ -37,6 +38,12 @@ namespace ColorMatchRush
         {
             int sec = Mathf.CeilToInt(timeSec);
             timerText.text = $"{sec / 60:0}:{sec % 60:00}";
+        }
+
+        private void UpdateScoreText(int score)
+        {
+            if (scoreText == null) return;
+            scoreText.text = score.ToString();
         }
     }
 }

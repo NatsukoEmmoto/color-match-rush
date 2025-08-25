@@ -7,14 +7,25 @@ namespace ColorMatchRush
     /// </summary>
     public class GameController : MonoBehaviour
     {
-        [Header("Timer Settings")]
-        [SerializeField, Tooltip("Initial countdown time in seconds.")]
-        private float timeLimit = 30f;
+        public static GameController Instance { get; private set; }
 
+        [Header("Timer Settings")]
+        [SerializeField, Tooltip("Time limit in seconds for one stage.")]
+        private float timeLimit = 30f; // [sec]
         private float remainingTime;
         private bool isRunning = false;
-
         public float RemainingTime => remainingTime;
+
+        private void Awake()
+        {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            Instance = this;
+            // DontDestroyOnLoad(gameObject); // enable if scene changes
+        }
 
         private void Start()
         {
@@ -38,10 +49,7 @@ namespace ColorMatchRush
         /// <summary>
         /// Reset timer to the initial start time.
         /// </summary>
-        public void ResetTimer()
-        {
-            remainingTime = timeLimit;
-        }
+        public void ResetTimer() => remainingTime = timeLimit;
 
         /// <summary>
         /// Start/resume countdown.

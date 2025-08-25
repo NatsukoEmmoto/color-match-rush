@@ -338,9 +338,15 @@ namespace ColorMatchRush
             }
             else
             {
+                // === Start resolution phase: pause the timer ===
                 isResolving = true;
+                GameController.Instance?.PauseTimer();
+
                 yield return ResolveBoardLoop();
+
+                // === End resolution phase: resume the timer ===
                 isResolving = false;
+                GameController.Instance?.StartTimer();
             }
 
             UnlockInput();

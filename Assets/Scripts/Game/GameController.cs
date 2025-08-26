@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 
 namespace ColorMatchRush
@@ -13,8 +14,14 @@ namespace ColorMatchRush
         [Header("Timer Settings")]
         [SerializeField, Tooltip("Time limit in seconds for one stage.")]
         private float timeLimit = 30f; // [sec]
+
+        [Header("Refs")]
+        [SerializeField] private UIManager uiManager;
+        [SerializeField] private InputController inputController;
+        [SerializeField] private BoardManager board;
         private float remainingTime;
         private bool isRunning = false;
+        private bool gameOver  = false;
         public float RemainingTime => remainingTime;
         public event Action<float> OnTimerChanged;
 
@@ -37,7 +44,7 @@ namespace ColorMatchRush
 
         private void Update()
         {
-            if (!isRunning) return;
+            if (!isRunning || gameOver) return;
 
             float oldTime = remainingTime;
             remainingTime -= Time.deltaTime;
@@ -70,8 +77,43 @@ namespace ColorMatchRush
 
         private void OnTimerEnd()
         {
-            Debug.Log("[GameController] Time is up!");
-            // TODO: Show result screen or handle end-of-game logic
+            if (gameOver) return;
+            gameOver = true;
+
+            // 1) Disable player input
+            inputController?.SetInputLock(true);
+
+            // 2) If the board is still resolving, wait until it's stable before showing results
+            StartCoroutine(ShowResultWhenStable());
+        }
+
+        private IEnumerator ShowResultWhenStable()
+        {
+            // Wait until BoardManager finishes resolving
+            while (board != null && board.IsResolving)
+                yield return null;
+
+            // 3) Show result screen (use current score from ScoreManager)
+            int score = ScoreManager.Instance != null ? ScoreManager.Instance.CurrentScore : 0;
+            if (uiManager != null)
+            {
+                uiManager.ShowResult(score, () => Retry());
+            }
+        }
+
+        private void Retry()
+        {
+            // Reinitialize score/board/timer for a new game
+            ScoreManager.Instance?.ResetScore();
+            board?.GenerateBoard();
+            ResetTimer();
+
+            // Hide result panel and re-enable input
+            if (uiManager != null) uiManager.HideResult();
+            inputController?.SetInputLock(false);
+
+            gameOver = false;
+            StartTimer();
         }
     }
 }

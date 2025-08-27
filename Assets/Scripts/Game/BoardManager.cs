@@ -15,7 +15,7 @@ namespace ColorMatchRush
 
         [Header("Prefabs & Root")]
         [SerializeField] private Piece[] piecePrefabs; // Expected order: Red, Blue, Green, Yellow, Purple
-        [SerializeField] private Transform boardRoot;  // Parent for instantiated pieces
+        [SerializeField] private Transform piecesRoot;  // Parent for instantiated pieces
 
         [Header("Layout")]
         [SerializeField, Tooltip("World-space size of one cell (units).")]
@@ -49,11 +49,11 @@ namespace ColorMatchRush
         private void Awake()
         {
             // Ensure boardRoot exists
-            if (boardRoot == null)
+            if (piecesRoot == null)
             {
                 var root = new GameObject("BoardRoot");
-                boardRoot = root.transform;
-                boardRoot.SetParent(transform, worldPositionStays: false);
+                piecesRoot = root.transform;
+                piecesRoot.SetParent(transform, worldPositionStays: false);
             }
         }
 
@@ -187,7 +187,7 @@ namespace ColorMatchRush
                         continue; // leave null
                     }
 
-                    Piece piece = Instantiate(prefab, boardRoot);
+                    Piece piece = Instantiate(prefab, piecesRoot);
                     Vector3 worldPos = CellToWorld(row, column);
                     piece.Initialize(row, column, prefab.Type, worldPos);
                     grid[row, column] = piece;
@@ -200,9 +200,9 @@ namespace ColorMatchRush
         /// </summary>
         public void ClearBoardImmediate()
         {
-            for (int i = boardRoot.childCount - 1; i >= 0; i--)
+            for (int i = piecesRoot.childCount - 1; i >= 0; i--)
             {
-                Destroy(boardRoot.GetChild(i).gameObject);
+                Destroy(piecesRoot.GetChild(i).gameObject);
             }
             grid = null;
         }
@@ -640,7 +640,7 @@ namespace ColorMatchRush
                     Vector3 targetWorld = CellToWorld(r, c);
                     Vector3 startWorld = targetWorld + new Vector3(0f, cellSize * spawnOvershootCells, 0f);
 
-                    Piece piece = Instantiate(prefab, boardRoot);
+                    Piece piece = Instantiate(prefab, piecesRoot);
                     piece.Initialize(r, c, prefab.Type, startWorld);
 
                     grid[r, c] = piece;

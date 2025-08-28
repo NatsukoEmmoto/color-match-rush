@@ -37,7 +37,8 @@ namespace ColorMatchRush
         private void UpdateTimerText(float timeSec)
         {
             int sec = Mathf.CeilToInt(timeSec);
-            timerText.text = $"{sec / 60:0}:{sec % 60:00}";
+            //timerText.text = $"{sec / 60:0}:{sec % 60:00}";
+            timerText.text = $"{sec}";
         }
 
         private void UpdateScoreText(int score)

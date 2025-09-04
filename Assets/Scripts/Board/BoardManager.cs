@@ -9,16 +9,18 @@ namespace ColorMatchRush
     /// </summary>
     public class BoardManager : MonoBehaviour
     {
-        [SerializeField] private BoardConfig config;
+        // === Config ===
+        [SerializeField] private BoardConfig boardConfig;
         
+        // === References ===
         [Header("Prefabs & Root")]
         [SerializeField] private Piece[] piecePrefabs; // Expected order: Red, Blue, Green, Yellow, Purple
         [SerializeField] private Transform piecesRoot;  // Parent for instantiated pieces
 
-        // Grid storage (row-major: [row, column])
+        // === State ===
         private Piece[,] grid;
         
-        // Services
+        // === Services ===
         private readonly MatchFinder matchFinder = new MatchFinder();
         private readonly GravityRefill gravityRefill = new GravityRefill();
         private readonly ShuffleService shuffleService = new ShuffleService();
@@ -26,10 +28,14 @@ namespace ColorMatchRush
         private readonly SwapService swapService = new SwapService();
         private readonly BoardLayout layout = new BoardLayout();   
 
-        public int Width => config.Width;
-        public int Height => config.Height;
-        public float CellSize => config.CellSize;
+        // === Public API ===
+        public int Width => boardConfig.Width;
+        public int Height => boardConfig.Height;
+        public float CellSize => boardConfig.CellSize;
         public Piece[,] Grid => grid;
+        
+
+        #region Lifecycle
 
         private void Awake()
         {
@@ -40,7 +46,7 @@ namespace ColorMatchRush
                 piecesRoot = root.transform;
                 piecesRoot.SetParent(transform, worldPositionStays: false);
             }
-            if (config == null)
+            if (boardConfig == null)
             {
                 Debug.LogError("[BoardManager] BoardConfig is not assigned. Disabling BoardManager.");
                 enabled = false;
@@ -51,33 +57,36 @@ namespace ColorMatchRush
 
         private void Start()
         {
-            if (config.GenerateOnStart)
+            if (boardConfig.GenerateOnStart)
             {
                 GenerateBoard();
             }
         }
 
+        #endregion
+
+        #region Generation & Layout
         /// <summary>
         /// Generate a fresh board with random pieces using the configured size.
         /// Clears existing children and recreates grid and pieces.
         /// </summary>
         public void GenerateBoard()
         {
-            if (config.RandomSeed != 0)
-                Random.InitState(config.RandomSeed);
+            if (boardConfig.RandomSeed != 0)
+                Random.InitState(boardConfig.RandomSeed);
 
             ComputeOrigin();
             ClearBoardImmediate();
 
             boardGenerator.GenerateBoard(
                 out grid,
-                config.Width,
-                config.Height,
+                boardConfig.Width,
+                boardConfig.Height,
                 piecePrefabs,
                 piecesRoot,
                 CellToWorld,
-                config.PreventInstantMatchesOnStart,
-                config.MaxInstantMatchRegenerations
+                boardConfig.PreventInstantMatchesOnStart,
+                boardConfig.MaxInstantMatchRegenerations
             );
         }
 
@@ -99,7 +108,7 @@ namespace ColorMatchRush
         /// </summary>
         public Vector3 CellToWorld(int row, int column)
         {
-            return layout.CellToWorld(row, column, config.CellSize);
+            return layout.CellToWorld(row, column, boardConfig.CellSize);
         }
 
         /// <summary>
@@ -108,7 +117,7 @@ namespace ColorMatchRush
         /// </summary>
         public void WorldToCell(Vector3 world, out int row, out int column)
         {
-            layout.WorldToCell(world, config.CellSize, config.Width, config.Height, out row, out column);
+            layout.WorldToCell(world, boardConfig.CellSize, boardConfig.Width, boardConfig.Height, out row, out column);
         }
 
         /// <summary>
@@ -116,7 +125,7 @@ namespace ColorMatchRush
         /// </summary>
         private void ComputeOrigin()
         {
-            layout.ComputeOrigin(config.Width, config.Height, config.CellSize, config.AutoCenter, config.ExplicitOrigin);
+            layout.ComputeOrigin(boardConfig.Width, boardConfig.Height, boardConfig.CellSize, boardConfig.AutoCenter, boardConfig.ExplicitOrigin);
         }
 
         /// <summary>
@@ -127,6 +136,7 @@ namespace ColorMatchRush
             if (piecePrefabs == null || piecePrefabs.Length == 0)
             {
                 Debug.LogError("[BoardManager] piecePrefabs not assigned or empty.");
+                enabled = false;
                 return null;
             }
 
@@ -142,13 +152,13 @@ namespace ColorMatchRush
             return prefab;
         }
 
-        #region Swap Operations
+        #endregion
+        #region Swap
         private bool swapInProgress = false;
         private bool isResolving = false;
         public bool IsResolving => isResolving;
 
-        private InputController inputController;
-        public void SetInputController(InputController controller) => inputController = controller;
+        [SerializeField] private InputController inputController;
 
         public bool TrySwap(Piece a, Piece b)
         {
@@ -158,8 +168,7 @@ namespace ColorMatchRush
             if (!swapService.AreAdjacent(a, b)) return false;
 
             swapInProgress = true;
-            if (inputController == null) inputController = FindObjectOfType<InputController>();
-            if (inputController) inputController.SetInputLock(true);
+            if (inputController != null) inputController.SetInputLock(true);
 
             // Start service coroutine (keep hooks and timing as before)
             StartCoroutine(
@@ -167,7 +176,7 @@ namespace ColorMatchRush
                     grid,
                     a, b,
                     CellToWorld,
-                    config.SwapMoveDuration,
+                    boardConfig.SwapMoveDuration,
                     (row, col) => CreatesMatchAt(row, col),
                     () => ResolveBoardLoop(),
                     () => { isResolving = true; GameController.Instance?.PauseTimer(); },
@@ -196,16 +205,12 @@ namespace ColorMatchRush
 
         private void UnlockInput()
         {
-            if (inputController != null) inputController.SetInputLock(false);
-            else
-            {
-                var ic = FindObjectOfType<InputController>();
-                if (ic) ic.SetInputLock(false);
-            }
+            if (inputController != null)
+                inputController.SetInputLock(false);
         }
         #endregion
 
-        #region Match Handling
+        #region Matching
 
         private bool IsInBounds(int row, int col)
         {
@@ -299,7 +304,7 @@ namespace ColorMatchRush
         /// </summary>
         public bool CollapseColumnsDownward()
         {
-            return gravityRefill.CollapseColumnsDownward(grid, CellToWorld, config.FallMoveDuration);
+            return gravityRefill.CollapseColumnsDownward(grid, CellToWorld, boardConfig.FallMoveDuration);
         }
         
         /// <summary>
@@ -313,9 +318,9 @@ namespace ColorMatchRush
                 GetRandomPiecePrefab,
                 piecesRoot,
                 CellToWorld,
-                config.CellSize,
-                (float)config.SpawnOvershootCells,
-                config.FallMoveDuration);
+                boardConfig.CellSize,
+                (float)boardConfig.SpawnOvershootCells,
+                boardConfig.FallMoveDuration);
         }
 
         /// <summary>
@@ -328,8 +333,9 @@ namespace ColorMatchRush
 
         #endregion
 
-        #region Shuffle & Deadboard
+        #region Shuffle
 
+        #region Resolve
         /// <summary>
         /// Return true if there exists at least one adjacent swap that would create a match.
         /// We simulate a swap in the grid (no animation), check, then revert.
@@ -349,7 +355,7 @@ namespace ColorMatchRush
             return shuffleService.ShuffleBoard(
                 grid,
                 CellToWorld,
-                config.FallMoveDuration,
+                boardConfig.FallMoveDuration,
                 maxAttempts,
                 requireValidMove);
         }
@@ -396,10 +402,14 @@ namespace ColorMatchRush
             }
         }
 
+        #endregion
+
+        
 #if UNITY_EDITOR
+#region Editor
         private void OnDrawGizmos()
         {
-            if (config == null) return;
+            if (boardConfig == null) return;
             // Draw board bounds and cell lines for quick visual validation in Scene view.
             ComputeOrigin();
             Vector2 org = layout.Origin;
@@ -408,24 +418,25 @@ namespace ColorMatchRush
 
             // Outer rect
             Vector3 bl = new Vector3(org.x, org.y, 0f);
-            Vector3 br = new Vector3(org.x + config.Width * config.CellSize, org.y, 0f);
-            Vector3 tl = new Vector3(org.x, org.y + config.Height * config.CellSize, 0f);
-            Vector3 tr = new Vector3(org.x + config.Width * config.CellSize, org.y + config.Height * config.CellSize, 0f);
+            Vector3 br = new Vector3(org.x + boardConfig.Width * boardConfig.CellSize, org.y, 0f);
+            Vector3 tl = new Vector3(org.x, org.y + boardConfig.Height * boardConfig.CellSize, 0f);
+            Vector3 tr = new Vector3(org.x + boardConfig.Width * boardConfig.CellSize, org.y + boardConfig.Height * boardConfig.CellSize, 0f);
             Gizmos.DrawLine(bl, br); Gizmos.DrawLine(br, tr);
             Gizmos.DrawLine(tr, tl); Gizmos.DrawLine(tl, bl);
 
             // Grid lines
-            for (int c = 1; c < config.Width; c++)
+            for (int c = 1; c < boardConfig.Width; c++)
             {
-                float x = org.x + c * config.CellSize;
+                float x = org.x + c * boardConfig.CellSize;
                 Gizmos.DrawLine(new Vector3(x, bl.y, 0f), new Vector3(x, tl.y, 0f));
             }
-            for (int r = 1; r < config.Height; r++)
+            for (int r = 1; r < boardConfig.Height; r++)
             {
-                float y = org.y + r * config.CellSize;
+                float y = org.y + r * boardConfig.CellSize;
                 Gizmos.DrawLine(new Vector3(bl.x, y, 0f), new Vector3(br.x, y, 0f));
             }
         }  
+#endregion
 #endif
     }
 }

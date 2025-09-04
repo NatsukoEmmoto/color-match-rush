@@ -102,14 +102,7 @@ namespace ColorMatchRush
         #region Private Methods
         private void InitializeReferences()
         {
-            if (board == null) board = FindObjectOfType<BoardManager>();
             if (inputCamera == null) inputCamera = Camera.main;
-            
-            // Set up bidirectional reference to avoid FindObjectOfType calls
-            if (board != null)
-            {
-                board.SetInputController(this);
-            }
         }
 
         private bool CanProcessInput()

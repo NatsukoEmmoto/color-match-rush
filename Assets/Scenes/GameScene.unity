@@ -277,8 +277,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4295a48f1a1a4478ebf92cac60775af3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  width: 8
-  height: 8
+  boardConfig: {fileID: 11400000, guid: a88d1d7e8c53d4cad9b47ca3e3ad1980, type: 2}
   piecePrefabs:
   - {fileID: 2679833729899193097, guid: 4f01d143b9bde42a4a81ce1ffdf53d0e, type: 3}
   - {fileID: 2679833729899193097, guid: db41dcfe60d9f4106b35cceaafb9966d, type: 3}
@@ -286,18 +285,7 @@ MonoBehaviour:
   - {fileID: 2679833729899193097, guid: b58c77a2aa67f462284c5b967e52c4d9, type: 3}
   - {fileID: 2679833729899193097, guid: eaf250bcefbe94756bd9a22c9f317b73, type: 3}
   piecesRoot: {fileID: 1675918174}
-  cellSize: 3
-  autoCenter: 1
-  explicitOrigin: {x: 0, y: 0}
-  generateOnStart: 1
-  randomSeed: 0
-  preventInstantMatchesOnStart: 1
-  maxInstantMatchRegenerations: 5
-  swapMoveDuration: 0.12
-  swapInProgress: 0
-  isResolving: 0
-  fallMoveDuration: 0.25
-  spawnOvershootCells: 1
+  inputController: {fileID: 1545997791}
 --- !u!4 &350540675
 Transform:
   m_ObjectHideFlags: 0

@@ -40,6 +40,9 @@ namespace ColorMatchRush
 
         // Cached origin (bottom-left corner in world space)
         private Vector2 origin;
+        
+        // Services
+        private readonly MatchFinder matchFinder = new MatchFinder();
 
         public int Width => width;
         public int Height => height;
@@ -363,29 +366,8 @@ namespace ColorMatchRush
         // Returns true if there is a 3+ line including cell (row,col)
         private bool CreatesMatchAt(int row, int column)
         {
-            Piece center = grid[row, column];
-            if (center == null) return false;
-            var type = center.Type;
-
-            int horiz = 1 + CountDir(row, column, 0, -1, type) + CountDir(row, column, 0, 1, type);
-            if (horiz >= 3) return true;
-
-            int vert = 1 + CountDir(row, column, -1, 0, type) + CountDir(row, column, 1, 0, type);
-            return vert >= 3;
-        }
-
-        private int CountDir(int row, int col, int dr, int dc, Piece.PieceType type)
-        {
-            int count = 0;
-            int r = row + dr, c = col + dc;
-            while (r >= 0 && r < height && c >= 0 && c < width)
-            {
-                var p = grid[r, c];
-                if (p == null || p.Type != type) break;
-                count++;
-                r += dr; c += dc;
-            }
-            return count;
+            if (grid == null) return false;
+            return matchFinder.CreatesMatchAt(grid, row, column);
         }
 
         private void UnlockInput()
@@ -401,9 +383,6 @@ namespace ColorMatchRush
 
         #region Match Handling
 
-        /// <summary>
-        /// Helper to validate indices against the current grid size.
-        /// </summary>
         private bool IsInBounds(int row, int col)
         {
             return grid != null &&
@@ -411,87 +390,9 @@ namespace ColorMatchRush
                    col >= 0 && col < grid.GetLength(1);
         }
 
-        /// <summary>
-        /// Scan the entire grid horizontally and vertically,
-        /// collecting all pieces that belong to runs with length >= 3.
-        /// Uses a HashSet to avoid duplicates (overlapping H/V runs).
-        /// </summary>
         public HashSet<Piece> FindAllMatches()
         {
-            var result = new HashSet<Piece>();
-            if (grid == null)
-                return result;
-
-            // Use actual grid dimensions (defensive against width/height mismatches)
-            int h = grid.GetLength(0);
-            int w = grid.GetLength(1);
-
-            // Horizontal scan (rows)
-            for (int r = 0; r < h; r++)
-            {
-                int c = 0;
-                while (c < w)
-                {
-                    var start = grid[r, c];
-                    if (start == null) { c++; continue; }
-
-                    int runStart = c;
-                    int runLen = 1;
-
-                    // grow run while same type
-                    while (c + runLen < w)
-                    {
-                        var next = grid[r, c + runLen];
-                        if (next == null || next.Type != start.Type) break;
-                        runLen++;
-                    }
-
-                    if (runLen >= 3)
-                    {
-                        for (int k = 0; k < runLen; k++)
-                        {
-                            var p = grid[r, runStart + k];
-                            if (p != null) result.Add(p);
-                        }
-                    }
-
-                    c += runLen; // jump to next segment
-                }
-            }
-
-            // Vertical scan (columns)
-            for (int c = 0; c < w; c++)
-            {
-                int r = 0;
-                while (r < h)
-                {
-                    var start = grid[r, c];
-                    if (start == null) { r++; continue; }
-
-                    int runStart = r;
-                    int runLen = 1;
-
-                    while (r + runLen < h)
-                    {
-                        var next = grid[r + runLen, c];
-                        if (next == null || next.Type != start.Type) break;
-                        runLen++;
-                    }
-
-                    if (runLen >= 3)
-                    {
-                        for (int k = 0; k < runLen; k++)
-                        {
-                            var p = grid[runStart + k, c];
-                            if (p != null) result.Add(p);
-                        }
-                    }
-
-                    r += runLen;
-                }
-            }
-
-            return result;
+            return matchFinder.FindAllMatches(grid);
         }
         
         /// <summary>

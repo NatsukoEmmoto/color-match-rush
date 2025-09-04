@@ -330,7 +330,7 @@ namespace ColorMatchRush
                 piecesRoot,
                 CellToWorld,
                 boardConfig.CellSize,
-                (float)boardConfig.SpawnOvershootCells,
+                boardConfig.SpawnOvershootCells,
                 boardConfig.FallMoveDuration);
         }
 

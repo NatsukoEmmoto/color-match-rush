@@ -23,7 +23,7 @@ namespace ColorMatchRush
         [Header("Timings")]
         [SerializeField] private float swapMoveDuration = 0.15f;
         [SerializeField] private float fallMoveDuration = 0.1f;
-        [SerializeField] private int spawnOvershootCells = 2;
+        [SerializeField] private float spawnOvershootCells = 2f;
 
         public int Width => width;
         public int Height => height;
@@ -35,7 +35,7 @@ namespace ColorMatchRush
         public int MaxInstantMatchRegenerations => maxInstantMatchRegenerations;
         public float SwapMoveDuration => swapMoveDuration;
         public float FallMoveDuration => fallMoveDuration;
-        public int SpawnOvershootCells => spawnOvershootCells;
+        public float SpawnOvershootCells => spawnOvershootCells;
         public bool GenerateOnStart => generateOnStart;
 
     }

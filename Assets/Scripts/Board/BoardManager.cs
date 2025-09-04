@@ -52,6 +52,17 @@ namespace ColorMatchRush
                 enabled = false;
                 return;
             }
+            if (inputController == null)
+            {
+                Debug.LogWarning("[BoardManager] InputController is not assigned. Trying auto-find...");
+                inputController = FindObjectOfType<InputController>();
+                if (inputController == null)
+                {
+                    Debug.LogError("[BoardManager] InputController not found. Disabling BoardManager.");
+                    enabled = false;
+                    return;
+                }
+            }
         }
 
 

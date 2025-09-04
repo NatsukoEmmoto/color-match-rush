@@ -43,6 +43,7 @@ namespace ColorMatchRush
         
         // Services
         private readonly MatchFinder matchFinder = new MatchFinder();
+        private readonly GravityRefill gravityRefill = new GravityRefill();
 
         public int Width => width;
         public int Height => height;
@@ -481,38 +482,7 @@ namespace ColorMatchRush
         /// </summary>
         public bool CollapseColumnsDownward()
         {
-            if (grid == null) return false;
-
-            int h = grid.GetLength(0);
-            int w = grid.GetLength(1);
-            bool anyMoved = false;
-
-            for (int c = 0; c < w; c++)
-            {
-                int write = 0; // next row to fill in this column (from bottom)
-                for (int r = 0; r < h; r++)
-                {
-                    var piece = grid[r, c];
-                    if (piece == null) continue;
-
-                    if (r != write)
-                    {
-                        // move down
-                        grid[write, c] = piece;
-                        grid[r, c] = null;
-
-                        piece.SetGridIndex(write, c);
-                        piece.MoveTo(CellToWorld(write, c), fallMoveDuration);
-
-                        anyMoved = true;
-                    }
-                    write++;
-                }
-
-                // cells [write..h-1] stay null (to be refilled later)
-            }
-
-            return anyMoved;
+            return gravityRefill.CollapseColumnsDownward(grid, CellToWorld, fallMoveDuration);
         }
         
         /// <summary>
@@ -521,37 +491,14 @@ namespace ColorMatchRush
         /// </summary>
         public bool RefillNewPiecesFromTop()
         {
-            if (grid == null) return false;
-
-            int h = grid.GetLength(0);
-            int w = grid.GetLength(1);
-            bool anySpawned = false;
-
-            for (int c = 0; c < w; c++)
-            {
-                for (int r = h - 1; r >= 0; r--)
-                {
-                    if (grid[r, c] != null) continue;
-
-                    // pick a random prefab
-                    Piece prefab = GetRandomPiecePrefab();
-                    if (prefab == null) continue;
-
-                    // spawn slightly above the target cell and fall down
-                    Vector3 targetWorld = CellToWorld(r, c);
-                    Vector3 startWorld = targetWorld + new Vector3(0f, cellSize * spawnOvershootCells, 0f);
-
-                    Piece piece = Instantiate(prefab, piecesRoot);
-                    piece.Initialize(r, c, prefab.Type, startWorld);
-
-                    grid[r, c] = piece;
-                    piece.MoveTo(targetWorld, fallMoveDuration);
-
-                    anySpawned = true;
-                }
-            }
-
-            return anySpawned;
+            return gravityRefill.RefillNewPiecesFromTop(
+                grid,
+                GetRandomPiecePrefab,
+                piecesRoot,
+                CellToWorld,
+                cellSize,
+                spawnOvershootCells,
+                fallMoveDuration);
         }
 
         /// <summary>
@@ -559,28 +506,7 @@ namespace ColorMatchRush
         /// </summary>
         private System.Collections.IEnumerator WaitUntilAllPiecesStop()
         {
-            if (grid == null) yield break;
-
-            int h = grid.GetLength(0);
-            int w = grid.GetLength(1);
-
-            while (true)
-            {
-                bool anyMoving = false;
-
-                for (int r = 0; r < h && !anyMoving; r++)
-                {
-                    for (int c = 0; c < w && !anyMoving; c++)
-                    {
-                        var p = grid[r, c];
-                        if (p != null && p.IsMoving)
-                            anyMoving = true;
-                    }
-                }
-
-                if (!anyMoving) yield break;
-                yield return null;
-            }
+            return gravityRefill.WaitUntilAllPiecesStop(grid);
         }
 
         #endregion

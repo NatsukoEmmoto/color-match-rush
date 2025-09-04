@@ -9,31 +9,11 @@ namespace ColorMatchRush
     /// </summary>
     public class BoardManager : MonoBehaviour
     {
-        [Header("Board Size")]
-        [SerializeField] private int width = 8;     // number of columns (x)
-        [SerializeField] private int height = 8;    // number of rows (y)
-
+        [SerializeField] private BoardConfig config;
+        
         [Header("Prefabs & Root")]
         [SerializeField] private Piece[] piecePrefabs; // Expected order: Red, Blue, Green, Yellow, Purple
         [SerializeField] private Transform piecesRoot;  // Parent for instantiated pieces
-
-        [Header("Layout")]
-        [SerializeField, Tooltip("World-space size of one cell (units).")]
-        private float cellSize = 1f;
-        [SerializeField, Tooltip("If true, compute origin so the board is centered around (0,0). If false, use explicit origin.")]
-        private bool autoCenter = true;
-        [SerializeField, Tooltip("Bottom-left world position of the board when autoCenter is false.")]
-        private Vector2 explicitOrigin = Vector2.zero;
-
-        [Header("Options")]
-        [SerializeField, Tooltip("If true, GenerateBoard will run in Start().")]
-        private bool generateOnStart = true;
-        [SerializeField, Tooltip("Optional random seed for repeatable boards. 0 = random.")]
-        private int randomSeed = 0;
-        [SerializeField, Tooltip("Avoid 3-in-a-row/column at startup.")]
-        private bool preventInstantMatchesOnStart = true;
-        [SerializeField, Tooltip("Maximum times to regenerate board to avoid instant matches.")]
-        private int maxInstantMatchRegenerations = 5;
 
         // Grid storage (row-major: [row, column])
         private Piece[,] grid;
@@ -46,9 +26,9 @@ namespace ColorMatchRush
         private readonly SwapService swapService = new SwapService();
         private readonly BoardLayout layout = new BoardLayout();   
 
-        public int Width => width;
-        public int Height => height;
-        public float CellSize => cellSize;
+        public int Width => config.Width;
+        public int Height => config.Height;
+        public float CellSize => config.CellSize;
         public Piece[,] Grid => grid;
 
         private void Awake()
@@ -60,11 +40,18 @@ namespace ColorMatchRush
                 piecesRoot = root.transform;
                 piecesRoot.SetParent(transform, worldPositionStays: false);
             }
+            if (config == null)
+            {
+                Debug.LogError("[BoardManager] BoardConfig is not assigned. Disabling BoardManager.");
+                enabled = false;
+                return;
+            }
         }
+
 
         private void Start()
         {
-            if (generateOnStart)
+            if (config.GenerateOnStart)
             {
                 GenerateBoard();
             }
@@ -76,21 +63,21 @@ namespace ColorMatchRush
         /// </summary>
         public void GenerateBoard()
         {
-            if (randomSeed != 0)
-                Random.InitState(randomSeed);
+            if (config.RandomSeed != 0)
+                Random.InitState(config.RandomSeed);
 
             ComputeOrigin();
             ClearBoardImmediate();
 
             boardGenerator.GenerateBoard(
                 out grid,
-                width,
-                height,
+                config.Width,
+                config.Height,
                 piecePrefabs,
                 piecesRoot,
                 CellToWorld,
-                preventInstantMatchesOnStart,
-                maxInstantMatchRegenerations
+                config.PreventInstantMatchesOnStart,
+                config.MaxInstantMatchRegenerations
             );
         }
 
@@ -112,7 +99,7 @@ namespace ColorMatchRush
         /// </summary>
         public Vector3 CellToWorld(int row, int column)
         {
-            return layout.CellToWorld(row, column, cellSize);
+            return layout.CellToWorld(row, column, config.CellSize);
         }
 
         /// <summary>
@@ -121,7 +108,7 @@ namespace ColorMatchRush
         /// </summary>
         public void WorldToCell(Vector3 world, out int row, out int column)
         {
-            layout.WorldToCell(world, cellSize, width, height, out row, out column);
+            layout.WorldToCell(world, config.CellSize, config.Width, config.Height, out row, out column);
         }
 
         /// <summary>
@@ -129,7 +116,7 @@ namespace ColorMatchRush
         /// </summary>
         private void ComputeOrigin()
         {
-            layout.ComputeOrigin(width, height, cellSize, autoCenter, explicitOrigin);
+            layout.ComputeOrigin(config.Width, config.Height, config.CellSize, config.AutoCenter, config.ExplicitOrigin);
         }
 
         /// <summary>
@@ -156,10 +143,7 @@ namespace ColorMatchRush
         }
 
         #region Swap Operations
-        [SerializeField, Tooltip("Seconds to move per swap/bounce.")]
-        private float swapMoveDuration = 0.12f;
-        [SerializeField] private bool swapInProgress = false;
-        [SerializeField, Tooltip("True while the board is resolving matches/cascades.")]
+        private bool swapInProgress = false;
         private bool isResolving = false;
         public bool IsResolving => isResolving;
 
@@ -183,7 +167,7 @@ namespace ColorMatchRush
                     grid,
                     a, b,
                     CellToWorld,
-                    swapMoveDuration,
+                    config.SwapMoveDuration,
                     (row, col) => CreatesMatchAt(row, col),
                     () => ResolveBoardLoop(),
                     () => { isResolving = true; GameController.Instance?.PauseTimer(); },
@@ -308,12 +292,6 @@ namespace ColorMatchRush
 
         #region Gravity & Refill
 
-        [Header("Resolve")]
-        [SerializeField, Tooltip("Seconds to move per falling step.")]
-        private float fallMoveDuration = 0.08f;
-        
-        [SerializeField, Tooltip("How many cells above the top to spawn new pieces before falling.")]
-        private float spawnOvershootCells = 1f;
 
         /// <summary>
         /// Collapse all columns downward using a write-pointer per column.
@@ -321,7 +299,7 @@ namespace ColorMatchRush
         /// </summary>
         public bool CollapseColumnsDownward()
         {
-            return gravityRefill.CollapseColumnsDownward(grid, CellToWorld, fallMoveDuration);
+            return gravityRefill.CollapseColumnsDownward(grid, CellToWorld, config.FallMoveDuration);
         }
         
         /// <summary>
@@ -335,9 +313,9 @@ namespace ColorMatchRush
                 GetRandomPiecePrefab,
                 piecesRoot,
                 CellToWorld,
-                cellSize,
-                spawnOvershootCells,
-                fallMoveDuration);
+                config.CellSize,
+                (float)config.SpawnOvershootCells,
+                config.FallMoveDuration);
         }
 
         /// <summary>
@@ -371,7 +349,7 @@ namespace ColorMatchRush
             return shuffleService.ShuffleBoard(
                 grid,
                 CellToWorld,
-                fallMoveDuration,
+                config.FallMoveDuration,
                 maxAttempts,
                 requireValidMove);
         }
@@ -421,6 +399,7 @@ namespace ColorMatchRush
 #if UNITY_EDITOR
         private void OnDrawGizmos()
         {
+            if (config == null) return;
             // Draw board bounds and cell lines for quick visual validation in Scene view.
             ComputeOrigin();
             Vector2 org = layout.Origin;
@@ -429,21 +408,21 @@ namespace ColorMatchRush
 
             // Outer rect
             Vector3 bl = new Vector3(org.x, org.y, 0f);
-            Vector3 br = new Vector3(org.x + width * cellSize, org.y, 0f);
-            Vector3 tl = new Vector3(org.x, org.y + height * cellSize, 0f);
-            Vector3 tr = new Vector3(org.x + width * cellSize, org.y + height * cellSize, 0f);
+            Vector3 br = new Vector3(org.x + config.Width * config.CellSize, org.y, 0f);
+            Vector3 tl = new Vector3(org.x, org.y + config.Height * config.CellSize, 0f);
+            Vector3 tr = new Vector3(org.x + config.Width * config.CellSize, org.y + config.Height * config.CellSize, 0f);
             Gizmos.DrawLine(bl, br); Gizmos.DrawLine(br, tr);
             Gizmos.DrawLine(tr, tl); Gizmos.DrawLine(tl, bl);
 
             // Grid lines
-            for (int c = 1; c < width; c++)
+            for (int c = 1; c < config.Width; c++)
             {
-                float x = org.x + c * cellSize;
+                float x = org.x + c * config.CellSize;
                 Gizmos.DrawLine(new Vector3(x, bl.y, 0f), new Vector3(x, tl.y, 0f));
             }
-            for (int r = 1; r < height; r++)
+            for (int r = 1; r < config.Height; r++)
             {
-                float y = org.y + r * cellSize;
+                float y = org.y + r * config.CellSize;
                 Gizmos.DrawLine(new Vector3(bl.x, y, 0f), new Vector3(br.x, y, 0f));
             }
         }  

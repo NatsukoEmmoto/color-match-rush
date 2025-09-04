@@ -36,7 +36,7 @@ namespace ColorMatchRush
             Action onResolveStart,                      // pause timer / set resolving=true
             Action onResolveEnd,                        // resume timer / set resolving=false
             Action onUnlockInput,                       // input unlock callback
-            Func<Piece,Piece,IEnumerator> waitUntilPiecesStop // wait for 2 pieces movement
+            Func<Piece,Piece,IEnumerator> waitUntilPiecesStop // wait for both pieces to complete their movement animations
         )
         {
             // Cache original indices

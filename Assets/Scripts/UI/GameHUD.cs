@@ -7,7 +7,7 @@ namespace ColorMatchRush
     /// Central HUD controller for in-game UI (timer, score, etc.).
     /// Pulls timer from GameController; score is updated via public API.
     /// </summary>
-    public class GameUI : MonoBehaviour
+    public class GameHUD : MonoBehaviour
     {
         [Header("Refs")]
         [SerializeField] private TMP_Text timerText;

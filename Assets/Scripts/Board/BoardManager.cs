@@ -37,14 +37,12 @@ namespace ColorMatchRush
 
         // Grid storage (row-major: [row, column])
         private Piece[,] grid;
-
-        // Cached origin (bottom-left corner in world space)
-        private Vector2 origin;
         
         // Services
         private readonly MatchFinder matchFinder = new MatchFinder();
         private readonly GravityRefill gravityRefill = new GravityRefill();
         private readonly ShuffleService shuffleService = new ShuffleService();
+        private readonly BoardLayout layout = new BoardLayout();   
 
         public int Width => width;
         public int Height => height;
@@ -218,9 +216,7 @@ namespace ColorMatchRush
         /// </summary>
         public Vector3 CellToWorld(int row, int column)
         {
-            float x = origin.x + (column + 0.5f) * cellSize;
-            float y = origin.y + (row + 0.5f) * cellSize;
-            return new Vector3(x, y, 0f);
+            return layout.CellToWorld(row, column, cellSize);
         }
 
         /// <summary>
@@ -229,10 +225,7 @@ namespace ColorMatchRush
         /// </summary>
         public void WorldToCell(Vector3 world, out int row, out int column)
         {
-            float localX = world.x - origin.x;
-            float localY = world.y - origin.y;
-            column = Mathf.Clamp(Mathf.FloorToInt(localX / cellSize), 0, width - 1);
-            row    = Mathf.Clamp(Mathf.FloorToInt(localY / cellSize), 0, height - 1);
+            layout.WorldToCell(world, cellSize, width, height, out row, out column);
         }
 
         /// <summary>
@@ -240,16 +233,9 @@ namespace ColorMatchRush
         /// </summary>
         private void ComputeOrigin()
         {
-            if (autoCenter)
-            {
-                float boardW = width * cellSize;
-                float boardH = height * cellSize;
-                origin = new Vector2(-boardW * 0.5f, -boardH * 0.5f);
-            }
-            else
-            {
-                origin = explicitOrigin;
-            }
+            layout.ComputeOrigin(width, height, cellSize, autoCenter, explicitOrigin);
+            
+            origin = layout.Origin;
         }
 
         /// <summary>
@@ -585,27 +571,30 @@ namespace ColorMatchRush
         {
             // Draw board bounds and cell lines for quick visual validation in Scene view.
             ComputeOrigin();
+            Vector2 org = layout.Origin;
+
             Gizmos.color = new Color(1f, 1f, 1f, 0.35f);
 
             // Outer rect
-            Vector3 bl = new Vector3(origin.x, origin.y, 0f);
-            Vector3 br = new Vector3(origin.x + width * cellSize, origin.y, 0f);
-            Vector3 tl = new Vector3(origin.x, origin.y + height * cellSize, 0f);
-            Vector3 tr = new Vector3(origin.x + width * cellSize, origin.y + height * cellSize, 0f);
-            Gizmos.DrawLine(bl, br); Gizmos.DrawLine(br, tr); Gizmos.DrawLine(tr, tl); Gizmos.DrawLine(tl, bl);
+            Vector3 bl = new Vector3(org.x, org.y, 0f);
+            Vector3 br = new Vector3(org.x + width * cellSize, org.y, 0f);
+            Vector3 tl = new Vector3(org.x, org.y + height * cellSize, 0f);
+            Vector3 tr = new Vector3(org.x + width * cellSize, org.y + height * cellSize, 0f);
+            Gizmos.DrawLine(bl, br); Gizmos.DrawLine(br, tr);
+            Gizmos.DrawLine(tr, tl); Gizmos.DrawLine(tl, bl);
 
             // Grid lines
             for (int c = 1; c < width; c++)
             {
-                float x = origin.x + c * cellSize;
+                float x = org.x + c * cellSize;
                 Gizmos.DrawLine(new Vector3(x, bl.y, 0f), new Vector3(x, tl.y, 0f));
             }
             for (int r = 1; r < height; r++)
             {
-                float y = origin.y + r * cellSize;
+                float y = org.y + r * cellSize;
                 Gizmos.DrawLine(new Vector3(bl.x, y, 0f), new Vector3(br.x, y, 0f));
             }
-        }
+        }  
 #endif
     }
 }

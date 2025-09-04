@@ -43,6 +43,7 @@ namespace ColorMatchRush
         private readonly GravityRefill gravityRefill = new GravityRefill();
         private readonly ShuffleService shuffleService = new ShuffleService();
         private readonly BoardGenerator boardGenerator = new BoardGenerator();
+        private readonly SwapService swapService = new SwapService();
         private readonly BoardLayout layout = new BoardLayout();   
 
         public int Width => width;
@@ -165,76 +166,34 @@ namespace ColorMatchRush
         private InputController inputController;
         public void SetInputController(InputController controller) => inputController = controller;
 
-        public bool AreAdjacent(Piece a, Piece b)
-        {
-            if (a == null || b == null) return false;
-            int dr = Mathf.Abs(a.Row - b.Row);
-            int dc = Mathf.Abs(a.Column - b.Column);
-            return (dr == 1 && dc == 0) || (dr == 0 && dc == 1);
-        }
-
         public bool TrySwap(Piece a, Piece b)
         {
             if (isResolving) return false;
             if (swapInProgress) return false;
             if (a == null || b == null || a == b) return false;
-            if (!AreAdjacent(a, b)) return false;
+            if (!swapService.AreAdjacent(a, b)) return false;
 
             swapInProgress = true;
             if (inputController == null) inputController = FindObjectOfType<InputController>();
             if (inputController) inputController.SetInputLock(true);
 
-            StartCoroutine(SwapRoutine(a, b));
+            // Start service coroutine (keep hooks and timing as before)
+            StartCoroutine(
+                swapService.TrySwapCoroutine(
+                    grid,
+                    a, b,
+                    CellToWorld,
+                    swapMoveDuration,
+                    (row, col) => CreatesMatchAt(row, col),
+                    () => ResolveBoardLoop(),
+                    () => { isResolving = true; GameController.Instance?.PauseTimer(); },
+                    () => { isResolving = false; GameController.Instance?.StartTimer(); },
+                    () => { UnlockInput(); swapInProgress = false; },
+                    (pa, pb) => WaitUntilPiecesStop(pa, pb)
+                )
+            );
+
             return true;
-        }
-
-        private System.Collections.IEnumerator SwapRoutine(Piece a, Piece b)
-        {
-            // Cache original indices
-            int ar = a.Row, ac = a.Column;
-            int br = b.Row, bc = b.Column;
-
-            // Swap in grid + indices
-            grid[ar, ac] = b; grid[br, bc] = a;
-            a.SetGridIndex(br, bc); b.SetGridIndex(ar, ac);
-
-            // Animate to new positions
-            a.MoveTo(CellToWorld(a.Row, a.Column), swapMoveDuration);
-            b.MoveTo(CellToWorld(b.Row, b.Column), swapMoveDuration);
-            yield return WaitUntilPiecesStop(a, b);
-
-            // Check local matches around both pieces
-            bool matched = CreatesMatchAt(a.Row, a.Column) || CreatesMatchAt(b.Row, b.Column);
-
-            if (!matched)
-            {
-                // Revert to original indices (ar,ac) / (br,bc)
-                grid[ar, ac] = a;
-                grid[br, bc] = b;
-
-                a.SetGridIndex(ar, ac);
-                b.SetGridIndex(br, bc);
-
-                a.MoveTo(CellToWorld(ar, ac), swapMoveDuration);
-                b.MoveTo(CellToWorld(br, bc), swapMoveDuration);
-                
-                yield return WaitUntilPiecesStop(a, b);
-            }
-            else
-            {
-                // === Start resolution phase: pause the timer ===
-                isResolving = true;
-                GameController.Instance?.PauseTimer();
-
-                yield return ResolveBoardLoop();
-
-                // === End resolution phase: resume the timer ===
-                isResolving = false;
-                GameController.Instance?.StartTimer();
-            }
-
-            UnlockInput();
-            swapInProgress = false;
         }
 
         private System.Collections.IEnumerator WaitUntilPiecesStop(Piece a, Piece b)
